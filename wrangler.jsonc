@@ -1,0 +1,41 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "doorbell",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-11-06",
+  "upload_source_maps": true,
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "assets": {
+    "binding": "ASSETS",
+    "run_worker_first": ["/*", "!/assets/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "DOOR", "class_name": "Door" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Door"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "doorbell",
+      "database_id": "7f0f58bd-6d12-4ee8-8300-6238bcfcc6be",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "UPLOADS", "bucket_name": "doorbell-uploads" }],
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "doorbell-jobs" }],
+    "consumers": [
+      {
+        "queue": "doorbell-jobs",
+        "max_retries": 5,
+        "dead_letter_queue": "doorbell-jobs-dlq"
+      }
+    ]
+  },
+  "analytics_engine_datasets": [
+    { "binding": "FUNNEL", "dataset": "doorbell_funnel" }
+  ],
+  "triggers": { "crons": ["*/15 * * * *"] }
+}

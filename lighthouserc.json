@@ -1,0 +1,16 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["https://doorbell.kumarbharath63.workers.dev/"],
+      "numberOfRuns": 3,
+      "settings": { "chromeFlags": "--headless=new" }
+    },
+    "assert": {
+      "assertions": {
+        "largest-contentful-paint": ["error", { "maxNumericValue": 1500, "aggregationMethod": "median" }],
+        "resource-summary:script:size": ["error", { "maxNumericValue": 30720 }]
+      }
+    },
+    "upload": { "target": "filesystem", "outputDir": ".lighthouseci" }
+  }
+}
