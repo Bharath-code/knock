@@ -15,7 +15,7 @@ import { ogPng } from "./og";
 import { createDoor, getDoor, ownerFromToken } from "./doors";
 import { gate, ipKey, pruneLimits } from "./gate";
 import { answerKnock, listInbox, ownerUser, undoKnock, type OwnerUser } from "./inbox";
-import { asAnswer } from "../shared/inbox";
+import { asAnswer, asReason, NOTE_MAX, type Reply } from "../shared/inbox";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
 
@@ -57,11 +57,15 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
   .post(
     "/:id/answer",
     validator("json", (v, c) => {
-      const answer = asAnswer((v as { answer?: unknown } | null)?.answer);
-      return answer ? { answer } : c.json({ error: "Answer yes, later or no." }, 400);
+      const b = (v ?? {}) as { answer?: unknown; reason?: unknown; note?: unknown };
+      const answer = asAnswer(b.answer);
+      const reason = b.reason == null ? undefined : asReason(b.reason);
+      const note = b.note == null ? "" : typeof b.note === "string" ? b.note.trim() : null;
+      if (!answer || reason === null || note === null || note.length > NOTE_MAX) return c.json({ error: "Check the answer, reason and note (up to 140 characters)." }, 400);
+      return { answer, reason, note } as Reply;
     }),
     async (c) => {
-    const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), c.req.valid("json").answer);
+    const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), c.req.valid("json"));
     return ok ? c.json({ ok: true }) : c.json({ error: "That knock is no longer open." }, 409);
   })
   .post("/:id/undo", async (c) => {

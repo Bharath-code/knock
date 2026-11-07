@@ -41,15 +41,15 @@ test("answer removes the card once; undo within 5 s restores it, later does not"
   const { db, sqlite } = await fakeDb();
   const now = Date.now();
   seed(sqlite, now);
-  expect(await answerKnock(db, owner, "high", "yes", now)).toBe(true);
-  expect(await answerKnock(db, owner, "high", "no", now)).toBe(false);
+  expect(await answerKnock(db, owner, "high", { answer: "yes" }, now)).toBe(true);
+  expect(await answerKnock(db, owner, "high", { answer: "no" }, now)).toBe(false);
   expect((await listInbox(db, owner, now)).map((c) => c.id)).toEqual(["low", "none"]);
   expect(sqlite.query("SELECT answered_in_window n FROM door_stats").get()).toEqual({ n: 1 });
   expect(await undoKnock(db, owner, "high", now + 6_000)).toBe(false);
   expect(await undoKnock(db, owner, "high", now + 1_000)).toBe(true);
   expect((await listInbox(db, owner, now)).map((c) => c.id)).toEqual(["high", "low", "none"]);
   expect(sqlite.query("SELECT answered_in_window n FROM door_stats").get()).toEqual({ n: 0 });
-  expect(await answerKnock(db, { userId: "other", orgId: "o" }, "low", "no", now)).toBe(false);
+  expect(await answerKnock(db, { userId: "other", orgId: "o" }, "low", { answer: "no" }, now)).toBe(false);
 });
 
 test("swipe and key maps", () => {
@@ -59,4 +59,11 @@ test("swipe and key maps", () => {
 
 test("proof links allow only http and https", () => {
   expect([safeProof("https://github.com/a"), safeProof("javascript:alert(1)"), safeProof("data:text/html,x"), safeProof(null)]).toEqual(["https://github.com/a", null, null, null]);
+});
+
+test("reason and note are stored with the decision", async () => {
+  const { db, sqlite } = await fakeDb();
+  seed(sqlite, Date.now());
+  await answerKnock(db, owner, "low", { answer: "no", reason: "stage", note: "Maybe next year" });
+  expect(sqlite.query("SELECT reason_code r, note n FROM decisions WHERE knock_id = 'low'").get()).toEqual({ r: "stage", n: "Maybe next year" });
 });

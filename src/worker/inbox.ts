@@ -1,4 +1,4 @@
-import { UNDO_MS, type InboxAnswer, type InboxCard } from "../shared/inbox";
+import { UNDO_MS, type InboxCard, type Reply } from "../shared/inbox";
 import { sha256 } from "./doors";
 
 export type OwnerUser = { userId: string; orgId: string };
@@ -39,17 +39,17 @@ export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()):
 
 const pending = `k.id = ?1 AND k.status IN ('new', 'seen') AND k.expires_at > ?2 AND k.door_id IN (SELECT id FROM doors WHERE owner_user_id = ?3)`;
 
-export const answerKnock = async (db: D1Database, o: OwnerUser, knockId: string, answer: InboxAnswer, now = Date.now()) => {
+export const answerKnock = async (db: D1Database, o: OwnerUser, knockId: string, r: Reply, now = Date.now()) => {
   const [first] = await db.batch([
     db
-      .prepare(`INSERT INTO decisions (id, org_id, knock_id, actor_user_id, answer, at) SELECT ?4, k.org_id, k.id, ?3, ?5, ?2 FROM knocks k WHERE ${pending}`)
-      .bind(knockId, now, o.userId, crypto.randomUUID(), answer),
+      .prepare(`INSERT INTO decisions (id, org_id, knock_id, actor_user_id, answer, reason_code, note, at) SELECT ?4, k.org_id, k.id, ?3, ?5, ?6, ?7, ?2 FROM knocks k WHERE ${pending}`)
+      .bind(knockId, now, o.userId, crypto.randomUUID(), r.answer, r.reason ?? null, r.note || null),
     db
       .prepare(`UPDATE door_stats SET answered_in_window = answered_in_window + 1, updated_at = ?2 WHERE door_id IN (SELECT k.door_id FROM knocks k WHERE ${pending})`)
       .bind(knockId, now, o.userId),
     db
       .prepare(`UPDATE person_stats SET answered = answered + 1, yes_count = yes_count + ?4, updated_at = ?2 WHERE person_id IN (SELECT k.person_id FROM knocks k WHERE ${pending})`)
-      .bind(knockId, now, o.userId, answer === "yes" ? 1 : 0),
+      .bind(knockId, now, o.userId, r.answer === "yes" ? 1 : 0),
     db
       .prepare(`UPDATE knocks AS k SET status = 'answered', answered_at = ?2, seen_at = COALESCE(seen_at, ?2) WHERE ${pending}`)
       .bind(knockId, now, o.userId),

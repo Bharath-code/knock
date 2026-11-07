@@ -1,7 +1,7 @@
 import { hc } from "hono/client";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { keyAction, safeProof, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard } from "../shared/inbox";
+import { keyAction, NOTE_MAX, REASONS, safeProof, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Api } from "../worker";
 import "../styles/theme.css";
 
@@ -51,6 +51,8 @@ const App = () => {
   const [cards, setCards] = useState<InboxCard[] | null>(null);
   const [i, setI] = useState(0);
   const [error, setError] = useState("");
+  const [reason, setReason] = useState<Reason | undefined>();
+  const [note, setNote] = useState("");
   const [undo, setUndo] = useState<{ card: InboxCard; at: number; index: number } | null>(null);
 
   useEffect(() => {
@@ -69,13 +71,19 @@ const App = () => {
   const answer = useCallback(async (a: InboxAnswer) => {
     const card = cards?.[i];
     if (!card) return;
+    const extra = { reason, note: note.trim() || undefined };
+    setReason(undefined);
+    setNote("");
+    setError("");
     setCards((cs) => cs!.filter((x) => x.id !== card.id));
     setI((n) => Math.max(0, Math.min(n, (cards?.length ?? 1) - 2)));
-    const r = await api.inbox[":id"].answer.$post({ param: { id: card.id }, json: { answer: a } }).catch(() => null);
+    const r = await api.inbox[":id"].answer.$post({ param: { id: card.id }, json: { answer: a, ...extra } }).catch(() => null);
     if (r?.ok) return setUndo({ card, at: Date.now(), index: i });
     setCards((cs) => [...cs!.slice(0, i), card, ...cs!.slice(i)]);
+    setReason(extra.reason);
+    setNote(extra.note ?? "");
     setError(r?.status === 409 ? "That knock was already answered." : "Couldn't save your answer. Try again.");
-  }, [cards, i]);
+  }, [cards, i, reason, note]);
 
   const undoLast = useCallback(async () => {
     if (!undo) return;
@@ -88,7 +96,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).closest("input, textarea")) return;
       const k = keyAction(e.key);
       if (!k) return;
       if (k.type === "move") setI((n) => Math.max(0, Math.min(n + k.by, (cards?.length ?? 1) - 1)));
@@ -103,7 +111,7 @@ const App = () => {
   return (
     <main className="mx-auto max-w-[380px] px-5 py-10">
       <h1 className="text-[30px] font-extrabold">Inbox</h1>
-      {error && <p role="alert" className="mt-4 rounded-md border border-no p-3 text-sm text-no">{error}</p>}
+      {error && <p role="alert" className="fixed inset-x-5 top-5 z-10 mx-auto max-w-[380px] rounded-lg bg-no p-3 text-sm text-on-accent shadow-e-2">{error}</p>}
       {cards && !card && (
         <section className="mt-6 rounded-lg border border-line bg-card p-5 shadow-e-1">
           <h2 className="text-lg font-bold">{undo ? "All answered" : "No knocks yet"}</h2>
@@ -114,6 +122,22 @@ const App = () => {
         <>
           <p className="mt-2 font-mono text-xs text-muted" aria-live="polite">{i + 1} of {cards!.length}</p>
           <div className="mt-4"><Card key={card.id} c={card} onAnswer={answer} /></div>
+          <fieldset className="mt-4">
+            <legend className="text-sm text-muted">Reason (optional)</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(Object.keys(REASONS) as Reason[]).map((r) => (
+                <button key={r} type="button" aria-pressed={reason === r} onClick={() => setReason(reason === r ? undefined : r)}
+                  className={`min-h-11 rounded-pill border px-4 text-sm ${reason === r ? "border-brass bg-brass-soft text-brass-ink" : "border-line text-muted"}`}>
+                  {REASONS[r]}
+                </button>
+              ))}
+            </div>
+            <label className="mt-3 block text-sm text-muted">
+              Note to sender (optional)
+              <textarea value={note} maxLength={NOTE_MAX} rows={2} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink" />
+            </label>
+            <p className="text-right font-mono text-xs text-muted">{note.length}/{NOTE_MAX}</p>
+          </fieldset>
           <div className="mt-5 grid grid-cols-3 gap-3">
             {(["no", "later", "yes"] as const).map((a) => (
               <button key={a} className={`min-h-11 rounded-pill px-4 font-medium text-on-accent ${TONE[a]}`} onClick={() => void answer(a)}>
