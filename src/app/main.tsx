@@ -1,7 +1,7 @@
 import { hc } from "hono/client";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { keyAction, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard } from "../shared/inbox";
+import { keyAction, safeProof, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard } from "../shared/inbox";
 import type { Api } from "../worker";
 import "../styles/theme.css";
 
@@ -32,9 +32,9 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
         {c.door} · fit {c.fit ?? "not scored"}
       </p>
       <p className="mt-3 line-clamp-3 text-[17px]">{c.message}</p>
-      {c.proof && (
-        <a className="mt-3 block truncate text-brass-ink underline" href={c.proof} target="_blank" rel="noreferrer noopener">
-          {c.proof}
+      {safeProof(c.proof) && (
+        <a className="mt-3 block truncate text-brass-ink underline" href={safeProof(c.proof)!} target="_blank" rel="noreferrer noopener">
+          {safeProof(c.proof)}
         </a>
       )}
       {(c.spam || c.rewrote) && (

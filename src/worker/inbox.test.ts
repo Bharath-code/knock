@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { keyAction, swipeAnswer } from "../shared/inbox";
+import { keyAction, safeProof, swipeAnswer } from "../shared/inbox";
 import { answerKnock, listInbox, undoKnock } from "./inbox";
 
 const fakeDb = async () => {
@@ -55,4 +55,8 @@ test("answer removes the card once; undo within 5 s restores it, later does not"
 test("swipe and key maps", () => {
   expect([swipeAnswer(120, 10), swipeAnswer(-120, 10), swipeAnswer(5, -120), swipeAnswer(5, 120), swipeAnswer(20, 20)]).toEqual(["yes", "no", "later", null, null]);
   expect([keyAction("J"), keyAction("y"), keyAction("u"), keyAction("x")]).toEqual([{ type: "move", by: 1 }, { type: "answer", answer: "yes" }, { type: "undo" }, null]);
+});
+
+test("proof links allow only http and https", () => {
+  expect([safeProof("https://github.com/a"), safeProof("javascript:alert(1)"), safeProof("data:text/html,x"), safeProof(null)]).toEqual(["https://github.com/a", null, null, null]);
 });

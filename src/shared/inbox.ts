@@ -35,3 +35,12 @@ export const keyAction = (key: string): KeyAction | null => {
     default: return null;
   }
 };
+
+export const safeProof = (u: string | null) => {
+  try {
+    const p = new URL(u ?? "");
+    return p.protocol === "https:" || p.protocol === "http:" ? p.href : null;
+  } catch {
+    return null;
+  }
+};
