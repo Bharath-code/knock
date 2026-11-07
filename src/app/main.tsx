@@ -1,7 +1,7 @@
 import { hc } from "hono/client";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CLOSE_MESSAGE, keyAction, NOTE_MAX, REASONS, safeProof, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
+import { CLOSE_MESSAGE, keyAction, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Api } from "../worker";
 import "../styles/theme.css";
 
@@ -64,6 +64,50 @@ const App = () => {
     }).catch(() => setError("Couldn't load your inbox."));
   }, []);
 
+  const cardsRef = useRef<InboxCard[]>([]);
+  const iRef = useRef(0);
+  const answered = useRef(new Set<string>());
+  cardsRef.current = cards ?? [];
+  iRef.current = i;
+  const loaded = cards !== null;
+
+  useEffect(() => {
+    if (!loaded) return;
+    let stop = false;
+    let ids: string[] = [];
+    const socks = new Map<string, WebSocket>();
+    const refresh = async () => {
+      const r = await api.inbox.$get().catch(() => null);
+      if (!r?.ok || stop) return;
+      const cur = cardsRef.current;
+      const have = new Set(cur.map((c) => c.id));
+      const fresh = ((await r.json()) as InboxCard[]).filter((c) => !have.has(c.id) && !answered.current.has(c.id));
+      if (!fresh.length) return;
+      const curId = cur[iRef.current]?.id;
+      const merged = sortCards([...cur, ...fresh]);
+      setCards(merged);
+      setI(Math.max(0, merged.findIndex((c) => c.id === curId)));
+      setInfo("");
+    };
+    const connect = (id: string) => {
+      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/inbox-live/${id}`);
+      socks.set(id, ws);
+      ws.onopen = () => void refresh();
+      ws.onmessage = () => void refresh();
+      ws.onclose = ws.onerror = () => { if (socks.get(id) === ws) socks.delete(id); };
+    };
+    const tick = async () => {
+      const r = await api.inbox.doors.$get().catch(() => null);
+      if (r?.ok && !stop) ids = await r.json();
+      const down = ids.filter((id) => socks.get(id)?.readyState !== WebSocket.OPEN);
+      if (down.length || !ids.length) void refresh();
+      for (const id of down) if (!socks.has(id)) connect(id);
+    };
+    void tick();
+    const timer = setInterval(() => void tick(), POLL_MS);
+    return () => { stop = true; clearInterval(timer); socks.forEach((w) => w.close()); };
+  }, [loaded]);
+
   useEffect(() => {
     if (!undo) return;
     const t = setTimeout(() => setUndo(null), UNDO_MS);
@@ -77,10 +121,12 @@ const App = () => {
     setReason(undefined);
     setNote("");
     setError("");
+    answered.current.add(card.id);
     setCards((cs) => cs!.filter((x) => x.id !== card.id));
     setI((n) => Math.max(0, Math.min(n, (cards?.length ?? 1) - 2)));
     const r = await api.inbox[":id"].answer.$post({ param: { id: card.id }, json: { answer: a, ...extra } }).catch(() => null);
     if (r?.ok) return setUndo({ card, at: Date.now(), index: i });
+    answered.current.delete(card.id);
     setCards((cs) => [...cs!.slice(0, i), card, ...cs!.slice(i)]);
     setReason(extra.reason);
     setNote(extra.note ?? "");
@@ -92,7 +138,7 @@ const App = () => {
     const u = undo;
     setUndo(null);
     const r = await api.inbox[":id"].undo.$post({ param: { id: u.card.id } }).catch(() => null);
-    if (r?.ok) { setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
+    if (r?.ok) { answered.current.delete(u.card.id); setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
     else setError("Too late to undo.");
   }, [undo]);
 
@@ -109,7 +155,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).closest("input, textarea")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element | null)?.closest?.("input, textarea")) return;
       const k = keyAction(e.key);
       if (!k) return;
       if (k.type === "move") setI((n) => Math.max(0, Math.min(n + k.by, (cards?.length ?? 1) - 1)));

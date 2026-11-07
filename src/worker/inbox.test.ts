@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { keyAction, safeProof, swipeAnswer } from "../shared/inbox";
+import { keyAction, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
 import { answerKnock, closeRest, listInbox, undoKnock } from "./inbox";
 
 const fakeDb = async () => {
@@ -82,4 +82,9 @@ test("close the rest answers every open knock once, logs one audit row, and cann
   expect(await undoKnock(db, owner, "low", now + 1_000)).toBe(false);
   expect(await closeRest(db, owner, now + 2_000)).toEqual([]);
   expect(sqlite.query("SELECT COUNT(*) n FROM audit_log").get()).toEqual({ n: 1 });
+});
+
+test("client sort matches the server order", () => {
+  const c = (id: string, fit: number | null, createdAt: number) => ({ id, fit, createdAt }) as InboxCard;
+  expect(sortCards([c("none", null, 1), c("low", 2, 5), c("high-new", 5, 9), c("high-old", 5, 3)]).map((x) => x.id)).toEqual(["high-old", "high-new", "low", "none"]);
 });

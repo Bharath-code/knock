@@ -113,3 +113,9 @@ export const closeRest = async (db: D1Database, o: OwnerUser, now = Date.now()):
     .all<{ to: string }>();
   return results.map((r) => ({ to: r.to, message: CLOSE_MESSAGE }));
 };
+
+export const ownerDoorIds = async (db: D1Database, o: OwnerUser): Promise<string[]> =>
+  (await db.prepare("SELECT id FROM doors WHERE owner_user_id = ?1 AND status = 'open'").bind(o.userId).all<{ id: string }>()).results.map((r) => r.id);
+
+export const ownsDoor = async (db: D1Database, o: OwnerUser, doorId: string) =>
+  (await db.prepare("SELECT 1 AS ok FROM doors WHERE id = ?1 AND owner_user_id = ?2").bind(doorId, o.userId).first()) !== null;

@@ -14,7 +14,7 @@ import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
 import { createDoor, getDoor, ownerFromToken } from "./doors";
 import { gate, ipKey, pruneLimits } from "./gate";
-import { answerKnock, closeRest, listInbox, ownerUser, undoKnock, type OwnerUser } from "./inbox";
+import { answerKnock, closeRest, listInbox, ownerDoorIds, ownerUser, ownsDoor, undoKnock, type OwnerUser } from "./inbox";
 import { asAnswer, asReason, NOTE_MAX, type Reply } from "../shared/inbox";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
@@ -68,6 +68,7 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), c.req.valid("json"));
     return ok ? c.json({ ok: true }) : c.json({ error: "That knock is no longer open." }, 409);
   })
+  .get("/doors", async (c) => c.json(await ownerDoorIds(c.env.DB, c.get("owner"))))
   .post("/close-rest", async (c) => {
     const closed = await closeRest(c.env.DB, c.get("owner"));
     const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
@@ -140,6 +141,14 @@ const app = new Hono<AppEnv>()
       }),
     };
     return c.json(results, Object.values(results).every((r) => r === "ok") ? 200 : 500);
+  })
+  .get("/api/inbox-live/:doorId", async (c) => {
+    if (c.req.header("upgrade") !== "websocket") return c.text("Expected a WebSocket.", 426);
+    if (c.req.header("origin") !== new URL(c.req.url).origin) return c.text("Forbidden", 403);
+    const o = await ownerUser(c.env.DB, getCookie(c, "ds"));
+    const id = c.req.param("doorId");
+    if (!o || !(await ownsDoor(c.env.DB, o, id))) return c.text("Not found", 404);
+    return c.env.DOOR.getByName(id).fetch(c.req.raw);
   })
   .get("/", (c) => c.html(Home()))
   .get("/check", (c) => c.html(CheckerPage({ siteKey: c.env.TURNSTILE_SITE_KEY })))

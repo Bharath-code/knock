@@ -58,3 +58,9 @@ export const safeProof = (u: string | null) => {
 export const CLOSE_REASON = "bulk";
 export const CLOSE_MESSAGE =
   "Thanks for knocking. I can't take this one on right now, and I wanted you to hear back instead of waiting. I wish you the best with it.";
+
+// Best fit first, unscored last, then oldest first. Matches the server's ORDER BY.
+export const sortCards = (cs: InboxCard[]) =>
+  [...cs].sort((a, b) => Number(a.fit == null) - Number(b.fit == null) || (b.fit ?? 0) - (a.fit ?? 0) || a.createdAt - b.createdAt);
+
+export const POLL_MS = 30_000;
