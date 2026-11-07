@@ -37,6 +37,18 @@ export const withinLimit = async (db: D1Database, key: string, now = Date.now())
 export const pruneLimits = (db: D1Database, now = Date.now()) =>
   db.prepare("DELETE FROM rate_limits WHERE window < ?1").bind(Math.floor(now / HOUR_MS) - 24).run();
 
+// An IPv6 user usually controls a whole /64, so key on that prefix; IPv4-mapped addresses count as IPv4.
+export const ipKey = (ip: string) => {
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mapped) return mapped[1]!;
+  if (!ip.includes(":")) return ip;
+  const [head = "", tail] = ip.toLowerCase().split("::");
+  const front = head ? head.split(":") : [];
+  const back = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? front : [...front, ...Array(Math.max(0, 8 - front.length - back.length)).fill("0"), ...back];
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":") + "::/64";
+};
+
 // Fails closed: with no secret the paid model route stays shut.
 export const gate = async (
   env: { DB: D1Database; TURNSTILE_SECRET?: string },
@@ -45,5 +57,5 @@ export const gate = async (
 ): Promise<Gate> => {
   if (!env.TURNSTILE_SECRET) return "unconfigured";
   if (!(await verifyTurnstile(env.TURNSTILE_SECRET, token, ip))) return "captcha";
-  return (await withinLimit(env.DB, `check:${ip}`)) ? "ok" : "limited";
+  return (await withinLimit(env.DB, `check:${ipKey(ip)}`)) ? "ok" : "limited";
 };
