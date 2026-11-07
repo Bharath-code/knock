@@ -27,3 +27,4 @@ Per task: build and test locally, then deploy to staging, run the staging smoke 
 - Typecheck and tests must pass before staging: `bun run typecheck`, `bun test src`.
 - Staging uses its own secrets. Never copy live secrets into staging or `.dev.vars.*`.
 - Staging emails only go to the user's own address.
+- Fake test data: `bun run seed:local` or `bun run seed:staging` (5 doors under /d/seed_akash, 8 knocks, sender emails are `delivered+seedN@resend.dev`). Safe to rerun. The script refuses live.
