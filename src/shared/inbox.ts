@@ -3,6 +3,16 @@ export const ANSWERS = ["yes", "later", "no"] as const;
 export type InboxAnswer = (typeof ANSWERS)[number];
 export const asAnswer = (s: unknown): InboxAnswer | null => ((ANSWERS as readonly unknown[]).includes(s) ? (s as InboxAnswer) : null);
 
+export const REASONS = {
+  level: "Not hiring at this level",
+  stage: "Not a fit for stage",
+  full: "Full",
+} as const;
+export type Reason = keyof typeof REASONS;
+export const asReason = (s: unknown): Reason | null => (typeof s === "string" && s in REASONS ? (s as Reason) : null);
+export const NOTE_MAX = 140;
+export type Reply = { answer: InboxAnswer; reason?: Reason; note?: string };
+
 export type InboxCard = {
   id: string;
   door: string;
