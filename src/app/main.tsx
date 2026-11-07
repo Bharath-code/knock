@@ -106,15 +106,16 @@ const App = () => {
     const connect = (id: string) => {
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/inbox-live/${id}`);
       socks.set(id, ws);
-      ws.onopen = () => void refresh();
       ws.onmessage = () => void refresh();
       ws.onclose = ws.onerror = () => { if (socks.get(id) === ws) socks.delete(id); };
     };
+    let first = true;
     const tick = async () => {
       const r = await api.inbox.doors.$get().catch(() => null);
       if (r?.ok && !stop) ids = await r.json();
       const down = ids.filter((id) => socks.get(id)?.readyState !== WebSocket.OPEN);
-      if (down.length || !ids.length) void refresh();
+      if (!first && (down.length || !ids.length)) void refresh();
+      first = false;
       for (const id of down) if (!socks.has(id)) connect(id);
     };
     void tick();
