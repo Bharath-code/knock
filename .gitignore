@@ -6,3 +6,4 @@ dist
 .remember
 .claudedocs
 .DS_Store
+*.cpuprofile

@@ -1,24 +1,33 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { validator } from "hono/validator";
 import { check as checkDraft } from "../shared/checker";
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { Home } from "./home";
+import { scoreDraft } from "./model";
 
 export { Door };
 
+const validBody = validator("json", (value, c) => {
+  const parsed = checkRequestSchema.safeParse(value);
+  return parsed.success
+    ? parsed.data
+    : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
+});
+
 const api = new Hono<{ Bindings: Env }>()
   .get("/health", (c) => c.json({ status: "ok" } satisfies Health))
-  .post(
-    "/check",
-    validator("json", (value, c) => {
-      const parsed = checkRequestSchema.safeParse(value);
-      return parsed.success
-        ? parsed.data
-        : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
-    }),
-    (c) => c.json(checkDraft(c.req.valid("json").draft)),
-  );
+  .post("/check", validBody, (c) => c.json(checkDraft(c.req.valid("json").draft)))
+  .post("/check/model", validBody, async (c) => {
+    const { ANTHROPIC_API_KEY: apiKey } = c.env as Env & { ANTHROPIC_API_KEY?: string };
+    if (!apiKey) return c.json({ error: "Suggestions aren't set up yet. Your checks above still work." }, 503);
+    const client = new Anthropic({ apiKey, maxRetries: 1, timeout: 8_000 });
+    const result = await scoreDraft(client, c.req.valid("json"));
+    return result.ok
+      ? c.json(result.check)
+      : c.json({ error: "Suggestions didn't load this time. Your checks above still work." }, 503);
+  });
 
 export type Api = typeof api;
 

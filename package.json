@@ -10,10 +10,12 @@
     "db:local": "wrangler d1 migrations apply doorbell --local",
     "db:remote": "wrangler d1 migrations apply doorbell --remote",
     "smoke": "bun scripts/smoke.ts",
+    "check:model": "bun scripts/check-model.ts",
     "lighthouse": "lhci autorun",
     "deploy": "bun run build && bun run db:remote && wrangler deploy && bun run lighthouse"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/figtree": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
