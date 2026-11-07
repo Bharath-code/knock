@@ -14,6 +14,8 @@ import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
 import { createDoor, getDoor, ownerFromToken } from "./doors";
 import { gate, ipKey, pruneLimits } from "./gate";
+import { answerKnock, listInbox, ownerUser, undoKnock, type OwnerUser } from "./inbox";
+import { asAnswer } from "../shared/inbox";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
 
@@ -43,7 +45,32 @@ const gateMessage = {
   unconfigured: "Checks aren't set up yet.",
 } as const;
 
+const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
+  .use(async (c, next) => {
+    const o = await ownerUser(c.env.DB, getCookie(c, "ds"));
+    if (!o) return c.json({ error: "Sign in to see your inbox." }, 401);
+    c.set("owner", o);
+    c.header("cache-control", "private, no-store");
+    await next();
+  })
+  .get("/", async (c) => c.json(await listInbox(c.env.DB, c.get("owner"))))
+  .post(
+    "/:id/answer",
+    validator("json", (v, c) => {
+      const answer = asAnswer((v as { answer?: unknown } | null)?.answer);
+      return answer ? { answer } : c.json({ error: "Answer yes, later or no." }, 400);
+    }),
+    async (c) => {
+    const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), c.req.valid("json").answer);
+    return ok ? c.json({ ok: true }) : c.json({ error: "That knock is no longer open." }, 409);
+  })
+  .post("/:id/undo", async (c) => {
+    const ok = await undoKnock(c.env.DB, c.get("owner"), c.req.param("id"));
+    return ok ? c.json({ ok: true }) : c.json({ error: "Too late to undo." }, 409);
+  });
+
 const api = new Hono<AppEnv>()
+  .route("/inbox", inbox)
   .get("/health", (c) => c.json({ status: "ok" } satisfies Health))
   .post("/check", validBody, (c) => c.json(checkDraft(c.req.valid("json").draft)))
   .post("/check/model", validBody, async (c) => {
