@@ -54,3 +54,7 @@ export const safeProof = (u: string | null) => {
     return null;
   }
 };
+
+export const CLOSE_REASON = "bulk";
+export const CLOSE_MESSAGE =
+  "Thanks for knocking. I can't take this one on right now, and I wanted you to hear back instead of waiting. I wish you the best with it.";

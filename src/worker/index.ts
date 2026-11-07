@@ -8,13 +8,13 @@ import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
-import { sendReceipt, type Receipt } from "./email";
+import { sendClosure, sendReceipt, type Closure, type Receipt } from "./email";
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
 import { createDoor, getDoor, ownerFromToken } from "./doors";
 import { gate, ipKey, pruneLimits } from "./gate";
-import { answerKnock, listInbox, ownerUser, undoKnock, type OwnerUser } from "./inbox";
+import { answerKnock, closeRest, listInbox, ownerUser, undoKnock, type OwnerUser } from "./inbox";
 import { asAnswer, asReason, NOTE_MAX, type Reply } from "../shared/inbox";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
@@ -67,6 +67,15 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     async (c) => {
     const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), c.req.valid("json"));
     return ok ? c.json({ ok: true }) : c.json({ error: "That knock is no longer open." }, 409);
+  })
+  .post("/close-rest", async (c) => {
+    const closed = await closeRest(c.env.DB, c.get("owner"));
+    const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
+    const who = owner?.name || `@${owner?.handle ?? "your door"}`;
+    for (let i = 0; i < closed.length; i += 100) {
+      await c.env.JOBS.sendBatch(closed.slice(i, i + 100).map((x) => ({ body: { type: "closure", ...x, who } })));
+    }
+    return c.json({ closed: closed.length });
   })
   .post("/:id/undo", async (c) => {
     const ok = await undoKnock(c.env.DB, c.get("owner"), c.req.param("id"));
@@ -254,18 +263,18 @@ export default {
   fetch: app.fetch,
   async queue(batch, env) {
     for (const message of batch.messages) {
-      const job = message.body as { type?: string } & Receipt;
-      if (job.type !== "receipt") {
+      const job = message.body as { type?: string } & Receipt & Closure;
+      if (job.type !== "receipt" && job.type !== "closure") {
         console.log("job", job.type);
         message.ack();
         continue;
       }
       try {
-        const sent = await sendReceipt(env as Secrets, job);
-        if (sent === "unconfigured") console.warn("receipt not sent: RESEND_API_KEY or EMAIL_FROM missing");
+        const sent = await (job.type === "receipt" ? sendReceipt(env as Secrets, job) : sendClosure(env as Secrets, job));
+        if (sent === "unconfigured") console.warn(`${job.type} not sent: RESEND_API_KEY or EMAIL_FROM missing`);
         message.ack();
       } catch (e) {
-        console.error("receipt failed", e instanceof Error ? e.message : e);
+        console.error(`${job.type} failed`, e instanceof Error ? e.message : e);
         message.retry({ delaySeconds: 30 });
       }
     }
