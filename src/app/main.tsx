@@ -2,6 +2,7 @@ import { hc } from "hono/client";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { CLOSE_MESSAGE, keyAction, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
+import type { Pool } from "../shared/codes";
 import type { Api } from "../worker";
 import "../styles/theme.css";
 
@@ -55,6 +56,10 @@ const App = () => {
   const [note, setNote] = useState("");
   const [info, setInfo] = useState("");
   const [booking, setBooking] = useState("");
+  const [pools, setPools] = useState<Pool[]>([]);
+  const [poolDoor, setPoolDoor] = useState("");
+  const [codeText, setCodeText] = useState("");
+  const codesBox = useRef<HTMLDetailsElement>(null);
   const confirm = useRef<HTMLDialogElement>(null);
   const [undo, setUndo] = useState<{ card: InboxCard; at: number; index: number } | null>(null);
 
@@ -68,6 +73,25 @@ const App = () => {
   useEffect(() => {
     api.inbox.booking.$get().then(async (r) => r.ok && setBooking((await r.json()).url ?? "")).catch(() => {});
   }, []);
+
+  const loadPools = useCallback(async () => {
+    const r = await api.inbox.codes.$get().catch(() => null);
+    if (!r?.ok) return;
+    const p = (await r.json()) as Pool[];
+    setPools(p);
+    setPoolDoor((d) => d || p[0]?.doorId || "");
+  }, []);
+  useEffect(() => { void loadPools(); }, [loadPools]);
+
+  const addCodes = async () => {
+    setError("");
+    const r = await api.inbox.codes.$post({ json: { doorId: poolDoor, text: codeText } }).catch(() => null);
+    const body = (await r?.json().catch(() => null)) as { added?: number; skipped?: number; error?: string } | null;
+    if (!r?.ok) return setError(body?.error ?? "Couldn't save your codes.");
+    setCodeText("");
+    setInfo(`Added ${body?.added ?? 0} ${body?.added === 1 ? "code" : "codes"}${body?.skipped ? `, skipped ${body.skipped} already in the pool` : ""}.`);
+    void loadPools();
+  };
 
   const saveBooking = async () => {
     setError("");
@@ -153,20 +177,28 @@ const App = () => {
     setCards((cs) => cs!.filter((x) => x.id !== card.id));
     setI((n) => Math.max(0, Math.min(n, (cards?.length ?? 1) - 2)));
     const r = await api.inbox[":id"].answer.$post({ param: { id: card.id }, json: { answer: a, ...extra } }).catch(() => null);
-    if (r?.ok) return setUndo({ card, at: Date.now(), index: i });
+    if (r?.ok) {
+      const { code } = (await r.json()) as { code?: string };
+      if (code === "empty") {
+        setInfo("That door is out of invite codes. The sender gets your booking link instead. Add more codes below.");
+        if (codesBox.current) codesBox.current.open = true;
+      }
+      if (a === "yes") void loadPools();
+      return setUndo({ card, at: Date.now(), index: i });
+    }
     answered.current.delete(card.id);
     setCards((cs) => [...cs!.slice(0, i), card, ...cs!.slice(i)]);
     setReason(extra.reason);
     setNote(extra.note ?? "");
     setError(r?.status === 409 ? "That knock was already answered." : "Couldn't save your answer. Try again.");
-  }, [cards, i, reason, note]);
+  }, [cards, i, reason, note, loadPools]);
 
   const undoLast = useCallback(async () => {
     if (!undo) return;
     const u = undo;
     setUndo(null);
     const r = await api.inbox[":id"].undo.$post({ param: { id: u.card.id } }).catch(() => null);
-    if (r?.ok) { answered.current.delete(u.card.id); setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
+    if (r?.ok) { void loadPools(); answered.current.delete(u.card.id); setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
     else setError("Too late to undo.");
   }, [undo]);
 
@@ -246,6 +278,30 @@ const App = () => {
           <input type="url" value={booking} maxLength={300} placeholder="https://cal.com/you/15min" onChange={(e) => setBooking(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink" />
         </label>
         <button className="mt-3 min-h-11 w-full rounded-pill border border-line font-medium" onClick={() => void saveBooking()}>Save</button>
+      </details>
+      <details ref={codesBox} className="mt-4 rounded-lg border border-line bg-card p-4">
+        <summary className="min-h-11 cursor-pointer font-medium leading-[44px]">Invite codes</summary>
+        {pools.length === 0 ? (
+          <p className="text-sm text-muted">Make a door first.</p>
+        ) : (
+          <>
+            <label className="block text-sm text-muted">
+              Door
+              <select value={poolDoor} onChange={(e) => setPoolDoor(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink">
+                {pools.map((p) => (
+                  <option key={p.doorId} value={p.doorId}>{p.slug} · {p.free} left of {p.total}</option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-3 block text-sm text-muted">
+              Paste codes, one per line, or choose a CSV
+              <textarea value={codeText} rows={4} onChange={(e) => setCodeText(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 font-mono text-ink" />
+            </label>
+            <input type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="Choose a CSV of codes" className="mt-2 block w-full text-sm" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setCodeText(await f.text()); }} />
+            <p className="mt-2 text-xs text-muted">Each Yes emails one unused code to that sender. Codes never appear in your inbox.</p>
+            <button className="mt-3 min-h-11 w-full rounded-pill border border-line font-medium disabled:opacity-50" disabled={!codeText.trim()} onClick={() => void addCodes()}>Add codes</button>
+          </>
+        )}
       </details>
       <dialog ref={confirm} className="m-auto w-[calc(100%-2.5rem)] max-w-[380px] rounded-lg border border-line bg-card p-5 text-ink backdrop:bg-black/50">
         <h2 className="text-lg font-bold">Close {cards?.length ?? 0} open {cards?.length === 1 ? "knock" : "knocks"}?</h2>

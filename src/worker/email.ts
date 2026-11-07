@@ -30,11 +30,11 @@ export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetc
   return "sent";
 };
 
-export type Yes = { to: string; who: string; url: string | null; note: string | null };
+export type Yes = { to: string; who: string; url: string | null; note: string | null; code?: string | null };
 
 export const sendYes = async (env: MailEnv, r: Yes, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
-  const parts = [`${r.who} said yes to your knock.`, r.note, r.url && `Pick a time that works: ${r.url}`].filter(Boolean);
+  const parts = [`${r.who} said yes to your knock.`, r.note, r.code && `Your invite code: ${r.code}`, r.url && `Pick a time that works: ${r.url}`].filter(Boolean);
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },

@@ -2,12 +2,14 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { keyAction, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
 import { bookingUrl } from "../shared/booking";
+import { parseCodes } from "../shared/codes";
 import { getBooking, setBooking, stillYes, yesJob } from "./booking";
+import { addCodes, codeFor, decryptCode, encryptCode, pools, yesCode } from "./codes";
 import { answerKnock, closeRest, listInbox, undoKnock } from "./inbox";
 
 const fakeDb = async () => {
   const sqlite = new Database(":memory:");
-  for (const f of ["0001_init", "0003_handles"]) sqlite.run(await Bun.file(`migrations/${f}.sql`).text());
+  for (const f of ["0001_init", "0003_handles", "0004_code_hash"]) sqlite.run(await Bun.file(`migrations/${f}.sql`).text());
   const stmt = (sql: string, args: unknown[] = []) => ({
     bind: (...a: unknown[]) => stmt(sql, a),
     all: async () => ({ results: sqlite.query(sql).all(...(args as never[])) }),
@@ -115,4 +117,64 @@ test("yes job carries the booking link and is skipped after undo or a re-answer"
   expect(await yesJob(db, owner, "low", now)).toBeNull();
   await setBooking(db, owner, null);
   expect(await getBooking(db, owner)).toBeNull();
+});
+
+const KEY = Buffer.alloc(32, 7).toString("base64");
+
+test("codes parse from paste or CSV, dedupe, and reject odd characters", () => {
+  expect(parseCodes("ABCD1\nabcd2, ABCD1;wxyz-3").codes).toEqual(["ABCD1", "abcd2", "wxyz-3"]);
+  expect(parseCodes('Code\r\n"ABCD1"\r\nEFGH2').codes).toEqual(["ABCD1", "EFGH2"]);
+  expect(parseCodes("ABCD1\nhttps://evil.co/x\nab\nOK 12").bad).toEqual(["https://evil.co/x", "ab", "OK 12"]);
+});
+
+test("codes are encrypted at rest with a fresh IV, and need the right key", async () => {
+  const a = await encryptCode(KEY, "BETA-1234");
+  expect(a).not.toContain("BETA");
+  expect(a).not.toBe(await encryptCode(KEY, "BETA-1234"));
+  expect(await decryptCode(KEY, a)).toBe("BETA-1234");
+  expect(decryptCode(Buffer.alloc(32, 9).toString("base64"), a)).rejects.toThrow();
+});
+
+test("uploading dedupes per door and the pool status reports counts only", async () => {
+  const { db, sqlite } = await fakeDb();
+  seed(sqlite, Date.now());
+  expect(await addCodes(db, KEY, "d", "o", ["AAAA1", "BBBB2"])).toEqual({ added: 2, skipped: 0 });
+  expect(await addCodes(db, KEY, "d", "o", ["BBBB2", "CCCC3"])).toEqual({ added: 1, skipped: 1 });
+  expect(await pools(db, owner)).toEqual([{ doorId: "d", slug: "profile", free: 3, total: 3 }]);
+  sqlite.run("INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('e','o','u','empty','post','beta','[]',2)");
+  const p = await pools(db, owner);
+  expect(p.find((x) => x.doorId === "e")).toEqual({ doorId: "e", slug: "empty", free: 0, total: 0 });
+  expect(JSON.stringify(p)).not.toMatch(/AAAA1|code_enc/);
+  expect(sqlite.query("SELECT code_enc FROM codes").all().some((r) => JSON.stringify(r).includes("AAAA1"))).toBe(false);
+});
+
+test("each Yes gets exactly one unused code; an empty pool and No answers do not", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  expect(await yesCode(db, "high")).toBe("none");
+  await addCodes(db, KEY, "d", "o", ["ONLY-1"]);
+  await answerKnock(db, owner, "none", { answer: "no" }, now);
+  expect((await pools(db, owner))[0]!.free).toBe(1);
+  await answerKnock(db, owner, "high", { answer: "yes" }, now);
+  await answerKnock(db, owner, "low", { answer: "yes" }, now);
+  expect([await yesCode(db, "high"), await yesCode(db, "low")]).toEqual(["assigned", "empty"]);
+  expect([await codeFor(db, KEY, "high"), await codeFor(db, KEY, "low"), await codeFor(db, KEY, "none")]).toEqual(["ONLY-1", null, null]);
+  expect(await codeFor(db, undefined, "high")).toBeNull();
+});
+
+test("undo releases the code, and a repeat Yes takes it again; a taken code stays taken", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  await addCodes(db, KEY, "d", "o", ["ONLY-1"]);
+  await answerKnock(db, owner, "high", { answer: "yes" }, now);
+  expect(await undoKnock(db, owner, "high", now + 1_000)).toBe(true);
+  expect((await pools(db, owner))[0]!.free).toBe(1);
+  await answerKnock(db, owner, "low", { answer: "yes" }, now + 2_000);
+  expect(await codeFor(db, KEY, "low")).toBe("ONLY-1");
+  expect(await undoKnock(db, owner, "low", now + 9_000)).toBe(false);
+  expect((await pools(db, owner))[0]!.free).toBe(0);
+  sqlite.run("DELETE FROM knocks WHERE id = 'low'");
+  expect((await pools(db, owner))[0]!.free).toBe(0);
 });

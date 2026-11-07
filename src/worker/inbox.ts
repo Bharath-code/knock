@@ -50,6 +50,16 @@ export const answerKnock = async (db: D1Database, o: OwnerUser, knockId: string,
     db
       .prepare(`UPDATE person_stats SET answered = answered + 1, yes_count = yes_count + ?4, updated_at = ?2 WHERE person_id IN (SELECT k.person_id FROM knocks k WHERE ${pending})`)
       .bind(knockId, now, o.userId, r.answer === "yes" ? 1 : 0),
+    ...(r.answer === "yes"
+      ? [
+          db
+            .prepare(
+              `UPDATE codes SET knock_id = ?1, assigned_at = ?2 WHERE id = (
+                 SELECT id FROM codes WHERE assigned_at IS NULL AND door_id = (SELECT k.door_id FROM knocks k WHERE ${pending}) ORDER BY rowid LIMIT 1)`,
+            )
+            .bind(knockId, now, o.userId),
+        ]
+      : []),
     db
       .prepare(`UPDATE knocks AS k SET status = 'answered', answered_at = ?2, seen_at = COALESCE(seen_at, ?2) WHERE ${pending}`)
       .bind(knockId, now, o.userId),
@@ -75,9 +85,12 @@ export const undoKnock = async (db: D1Database, o: OwnerUser, knockId: string, n
     db
       .prepare(`UPDATE knocks SET status = 'seen', answered_at = NULL WHERE id = ?1 AND EXISTS (SELECT 1 FROM decisions d WHERE ${undoable})`)
       .bind(knockId, since, o.userId),
+    db
+      .prepare(`UPDATE codes SET knock_id = NULL, assigned_at = NULL WHERE knock_id = ?1 AND EXISTS (${dec})`)
+      .bind(knockId, since, o.userId),
     db.prepare(`DELETE FROM decisions WHERE id IN (${dec})`).bind(knockId, since, o.userId),
   ]);
-  return (done[3]?.meta.changes ?? 0) === 1;
+  return (done[4]?.meta.changes ?? 0) === 1;
 };
 
 const open = `k.status IN ('new', 'seen') AND k.expires_at > ?1 AND k.door_id IN (SELECT id FROM doors WHERE owner_user_id = ?2)`;
