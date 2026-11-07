@@ -4,13 +4,12 @@ const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export type Gate = "ok" | "captcha" | "limited" | "unconfigured";
 
-export const TURNSTILE_ACTION = "check";
-
 export const verifyTurnstile = async (
   secret: string,
   token: string,
   ip: string,
   hostnames: string[],
+  action: string,
   fetcher: typeof fetch = fetch,
 ) => {
   if (!token) return false;
@@ -21,7 +20,7 @@ export const verifyTurnstile = async (
   try {
     const res = await fetcher(SITEVERIFY, { method: "POST", body });
     const out = (await res.json()) as { success?: boolean; action?: string; hostname?: string };
-    return out.success === true && out.action === TURNSTILE_ACTION && hostnames.includes(out.hostname ?? "");
+    return out.success === true && out.action === action && hostnames.includes(out.hostname ?? "");
   } catch {
     return false;
   }
@@ -58,9 +57,10 @@ export const gate = async (
   env: { DB: D1Database; TURNSTILE_SECRET?: string; TURNSTILE_HOSTNAMES?: string },
   ip: string,
   token: string,
+  action = "check",
 ): Promise<Gate> => {
   const hostnames = (env.TURNSTILE_HOSTNAMES ?? "").split(",").map((h) => h.trim()).filter(Boolean);
   if (!env.TURNSTILE_SECRET || hostnames.length === 0) return "unconfigured";
-  if (!(await verifyTurnstile(env.TURNSTILE_SECRET, token, ip, hostnames))) return "captcha";
-  return (await withinLimit(env.DB, `check:${ipKey(ip)}`)) ? "ok" : "limited";
+  if (!(await verifyTurnstile(env.TURNSTILE_SECRET, token, ip, hostnames, action))) return "captcha";
+  return (await withinLimit(env.DB, `${action}:${ipKey(ip)}`)) ? "ok" : "limited";
 };

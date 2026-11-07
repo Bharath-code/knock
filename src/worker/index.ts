@@ -1,10 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
 import { validator } from "hono/validator";
 import { check as checkDraft } from "../shared/checker";
+import { createDoorSchema, defaultFields, pickTemplate, PROFILE_SLUG, handleSchema } from "../shared/door";
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
+import { DoorPage, NewDoorPage, NotFoundDoor } from "./door-pages";
+import { ogPng } from "./og";
+import { createDoor, getDoor, ownerFromToken } from "./doors";
 import { gate, pruneLimits } from "./gate";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
@@ -31,7 +36,7 @@ const runModel = async (env: Secrets, input: { post: string; draft: string }): P
 
 const gateMessage = {
   captcha: "We couldn't confirm you're human. Please try again.",
-  limited: "That's 20 checks this hour. Try again a bit later.",
+  limited: "That's 20 tries this hour from your network. Try again a bit later.",
   unconfigured: "Checks aren't set up yet.",
 } as const;
 
@@ -112,6 +117,56 @@ const app = new Hono<AppEnv>()
     return c.html(
       CheckerPage({ ...kept, rules: checkDraft(parsed.data.draft), model: result?.ok ? result.check : "unavailable" }),
     );
+  })
+  .get("/new", async (c) => c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY })))
+  .post("/new", async (c) => {
+    const form = await c.req.parseBody({ all: true });
+    const one = (k: string) => (typeof form[k] === "string" ? (form[k] as string) : "");
+    const many = (k: string) => [form[k] ?? []].flat().filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean);
+    const token = getCookie(c, "ds");
+    const owner = await ownerFromToken(c.env.DB, token);
+    const post = one("post").slice(0, 10_000);
+    const handleIn = owner?.handle ?? one("handle");
+    const base = { owner, siteKey: c.env.TURNSTILE_SITE_KEY, post, handle: handleIn, name: one("name") };
+    const bad = (error: string, extra = {}) => c.html(NewDoorPage({ ...base, ...extra, error }), 400);
+    if (!handleSchema.safeParse(handleIn).success) return bad("Handles use 3 to 20 letters, numbers or underscores.");
+    const mode = post === "" ? "claim" : one("step") === "create" ? "create" : "analyze";
+    if (mode === "analyze") {
+      const template = pickTemplate(post);
+      return c.html(NewDoorPage({ ...base, template, fields: defaultFields[template] }));
+    }
+    const parsed = createDoorSchema.safeParse({
+      handle: handleIn,
+      name: base.name,
+      post,
+      template: one("template") || "referral",
+      fields: mode === "claim" ? ["-"] : many("field"),
+      window: one("window") || "7",
+    });
+    if (!parsed.success) {
+      return bad("Check the questions (1 to 3) and the answer window.", { template: pickTemplate(post), fields: many("field") });
+    }
+    const g = await gate(c.env, clientIp(c.req.raw), one("cf-turnstile-response"), "new");
+    if (g !== "ok") {
+      const again = mode === "claim" ? {} : { template: parsed.data.template, fields: parsed.data.fields, window: parsed.data.window };
+      return c.html(NewDoorPage({ ...base, ...again, error: gateMessage[g] }), g === "limited" ? 429 : g === "captcha" ? 403 : 503);
+    }
+    const made = await createDoor(c.env.DB, parsed.data, token);
+    if (!made.ok) return bad(made.error);
+    if (made.token) setCookie(c, "ds", made.token, { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/", maxAge: 31_536_000 });
+    return c.redirect(made.slug === PROFILE_SLUG ? `/d/${made.handle}?made=1` : `/d/${made.handle}/${made.slug}?made=1`, 303);
+  })
+  .get("/d/:handle/:slug/og.png", async (c) => {
+    const door = await getDoor(c.env.DB, c.req.param("handle"), c.req.param("slug"));
+    return door ? new Response((await ogPng(door)) as unknown as ArrayBuffer, { headers: { "content-type": "image/png", "cache-control": "public, max-age=300" } }) : c.notFound();
+  })
+  .get("/d/:handle/:slug?", async (c) => {
+    const handle = c.req.param("handle");
+    const slug = c.req.param("slug") ?? PROFILE_SLUG;
+    const door = await getDoor(c.env.DB, handle, slug);
+    if (!door) return c.html(NotFoundDoor(), 404);
+    const path = slug === PROFILE_SLUG ? `/d/${handle}` : `/d/${handle}/${slug}`;
+    return c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: c.req.query("made") === "1" }));
   })
   .get("/app/*", (c) => c.env.ASSETS.fetch(new URL("/", c.req.url)))
   .get("/app", (c) => c.env.ASSETS.fetch(new URL("/", c.req.url)))
