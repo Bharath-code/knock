@@ -48,7 +48,7 @@
       "name": "doorbell-staging",
       "triggers": { "crons": [] },
       "vars": {
-        "TURNSTILE_SITE_KEY": "0x4AAAAAAF3S6H_ZkmksK2ut",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAF3YpKTB92qBaWfT",
         "TURNSTILE_HOSTNAMES": "doorbell-staging.kumarbharath63.workers.dev"
       },
       "durable_objects": {
