@@ -1,7 +1,7 @@
 {
   "ci": {
     "collect": {
-      "url": ["https://doorbell.kumarbharath63.workers.dev/"],
+      "url": ["https://doorbell.kumarbharath63.workers.dev/", "https://doorbell.kumarbharath63.workers.dev/check"],
       "numberOfRuns": 3,
       "settings": { "chromeFlags": "--headless=new" }
     },
