@@ -1,8 +1,9 @@
 import { PROFILE_SLUG, profileFields, slugify, type CreateDoor } from "../shared/door";
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
-const sha256 = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
-const newToken = () => hex(crypto.getRandomValues(new Uint8Array(24)).buffer as ArrayBuffer);
+export const sha256 = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+export const randomHex = (bytes: number) => hex(crypto.getRandomValues(new Uint8Array(bytes)).buffer as ArrayBuffer);
+const newToken = () => randomHex(24);
 
 export type Owner = { handle: string; name: string };
 
@@ -89,6 +90,8 @@ export const createDoor = async (db: D1Database, input: CreateDoor, token: strin
 };
 
 export type DoorView = {
+  id: string;
+  orgId: string;
   handle: string;
   name: string;
   slug: string;
@@ -105,7 +108,7 @@ export type DoorView = {
 export const getDoor = async (db: D1Database, handle: string, slug: string): Promise<DoorView | null> => {
   const r = await db
     .prepare(
-      `SELECT p.handle, p.display_name, d.slug, d.kind, d.template, d.post_text, d.fields_json, d.window_days, d.status,
+      `SELECT d.id, d.org_id, p.handle, p.display_name, d.slug, d.kind, d.template, d.post_text, d.fields_json, d.window_days, d.status,
               COALESCE(s.knocks_total, 0) AS knocks, COALESCE(s.answered_in_window, 0) AS answered
        FROM doors d JOIN users u ON u.id = d.owner_user_id JOIN people p ON p.id = u.person_id
        LEFT JOIN door_stats s ON s.door_id = d.id
@@ -113,6 +116,8 @@ export const getDoor = async (db: D1Database, handle: string, slug: string): Pro
     )
     .bind(handle, slug)
     .first<{
+      id: string;
+      org_id: string;
       handle: string;
       display_name: string | null;
       slug: string;
@@ -127,6 +132,8 @@ export const getDoor = async (db: D1Database, handle: string, slug: string): Pro
     }>();
   return r
     ? {
+        id: r.id,
+        orgId: r.org_id,
         handle: r.handle,
         name: r.display_name ?? "",
         slug: r.slug,

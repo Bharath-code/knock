@@ -3,10 +3,12 @@ import type { Child } from "hono/jsx";
 import css from "../styles/theme.css?url";
 import { answerRate, defaultFields, replyLine, templates, WINDOWS, type Template } from "../shared/door";
 import type { DoorView, Owner } from "./doors";
+import { KnockFormView, StatusBody, type KnockForm } from "./knock-pages";
+import type { Status } from "./knocks";
 
 const copyScript = `document.querySelectorAll('[data-copy]').forEach(function(b){b.addEventListener('click',function(){var t=document.getElementById(b.dataset.copy);navigator.clipboard.writeText(t.value).then(function(){b.textContent='Copied'});t.select()})})`;
 
-const Shell = ({ title, description, head, children }: { title: string; description: string; head?: Child; children: Child }) => (
+export const Shell = ({ title, description, head, children }: { title: string; description: string; head?: Child; children: Child }) => (
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
@@ -114,7 +116,7 @@ export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "",
 
 export const doorTitle = (d: DoorView) => (d.kind === "profile" ? `Ask @${d.handle}` : d.post.split(/\n/)[0]!.slice(0, 70));
 
-export const DoorPage = ({ door, url, made }: { door: DoorView; url: string; made: boolean }) => {
+export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { door: DoorView; url: string; made: boolean; siteKey?: string; source?: string; form?: KnockForm }) => {
   const rate = answerRate(door.knocks, door.answered);
   const og = `${url}/og.png`;
   const title = `${doorTitle(door)} | Doorbell`;
@@ -138,7 +140,7 @@ export const DoorPage = ({ door, url, made }: { door: DoorView; url: string; mad
         <section class="mt-6 rounded-lg border border-line bg-brass-soft p-5" aria-labelledby="live">
           <h2 id="live" class="text-xl font-extrabold">Your door is live</h2>
           <label for="reply" class="mt-3 block text-[15px] font-medium">Paste this in your post or bio</label>
-          <input id="reply" readonly value={door.kind === "profile" ? url : replyLine(url)} class={input} />
+          <input id="reply" readonly value={door.kind === "profile" ? url : replyLine(`${url}?s=reply`)} class={input} />
           <button type="button" data-copy="reply" class={`${button} mt-3`}>Copy</button>
         </section>
       )}
@@ -156,6 +158,7 @@ export const DoorPage = ({ door, url, made }: { door: DoorView; url: string; mad
           {rate !== null && <span class="mt-1 block font-mono text-xs text-yes">{rate}% answered in time, {door.knocks} knocks</span>}
         </p>
       )}
+      {door.status === "open" && <KnockFormView door={door} siteKey={siteKey} source={source} form={form} />}
     </Shell>
   );
 };
@@ -164,5 +167,11 @@ export const NotFoundDoor = () => (
   <Shell title="No such door | Doorbell" description="This door does not exist.">
     <h1 class="mt-3 text-[34px] font-extrabold">No such door</h1>
     <p class="mt-3 text-muted">Check the link, or <a href="/new">make your own door</a>.</p>
+  </Shell>
+);
+
+export const StatusPage = ({ s, link }: { s: Status; link: string }) => (
+  <Shell title="Your knock | Doorbell" description="Status of your knock." head={<meta name="robots" content="noindex, nofollow" />}>
+    <StatusBody s={s} link={link} />
   </Shell>
 );
