@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { keyAction, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
+import { keyAction, NOTE_MAX, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
 import { bookingUrl } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { parseCodes } from "../shared/codes";
@@ -186,7 +186,7 @@ test("every template has a kind default for No and Not now, and unknown template
     for (const a of ["no", "later"] as const) {
       const m = closureMessage(t, a);
       expect(m.length).toBeGreaterThan(40);
-      expect(m.length).toBeLessThan(220);
+      expect(m.length).toBeLessThanOrEqual(NOTE_MAX);
       expect(m).not.toMatch(/https?:|www\./);
     }
     expect(closureMessage(t, "no")).not.toBe(closureMessage(t, "later"));

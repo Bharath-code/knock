@@ -6,7 +6,7 @@ const COPY: Record<string, Record<ClosureAnswer, string>> = {
     later: "Thanks for knocking. I can't give this a proper look yet. It's a not now, not a no, so feel free to knock again in a few weeks.",
   },
   beta: {
-    no: "Thanks for wanting to try it. I'm not adding more testers right now, and I wanted you to hear back instead of waiting. I appreciate the interest.",
+    no: "Thanks for wanting to try it. I'm not adding more testers right now, and I wanted you to hear back instead of waiting.",
     later: "Thanks for wanting to try it. The beta is full for now. It's a not now, not a no, so feel free to knock again later.",
   },
   gig: {
