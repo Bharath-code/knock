@@ -42,4 +42,40 @@
     { "binding": "FUNNEL", "dataset": "doorbell_funnel" }
   ],
   "triggers": { "crons": ["*/15 * * * *"] }
+  ,
+  "env": {
+    "staging": {
+      "name": "doorbell-staging",
+      "triggers": { "crons": [] },
+      "vars": {
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAF3S6H_ZkmksK2ut",
+        "TURNSTILE_HOSTNAMES": "doorbell-staging.kumarbharath63.workers.dev"
+      },
+      "durable_objects": {
+        "bindings": [{ "name": "DOOR", "class_name": "Door" }]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "doorbell-staging",
+          "database_id": "c2c8460b-3484-444c-9575-258e71062ed4",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "UPLOADS", "bucket_name": "doorbell-staging-uploads" }],
+      "queues": {
+        "producers": [{ "binding": "JOBS", "queue": "doorbell-staging-jobs" }],
+        "consumers": [
+          {
+            "queue": "doorbell-staging-jobs",
+            "max_retries": 5,
+            "dead_letter_queue": "doorbell-staging-jobs-dlq"
+          }
+        ]
+      },
+      "analytics_engine_datasets": [
+        { "binding": "FUNNEL", "dataset": "doorbell_staging_funnel" }
+      ]
+    }
+  }
 }
