@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { keyAction, safeProof, swipeAnswer } from "../shared/inbox";
-import { answerKnock, listInbox, undoKnock } from "./inbox";
+import { answerKnock, closeRest, listInbox, undoKnock } from "./inbox";
 
 const fakeDb = async () => {
   const sqlite = new Database(":memory:");
@@ -66,4 +66,20 @@ test("reason and note are stored with the decision", async () => {
   seed(sqlite, Date.now());
   await answerKnock(db, owner, "low", { answer: "no", reason: "stage", note: "Maybe next year" });
   expect(sqlite.query("SELECT reason_code r, note n FROM decisions WHERE knock_id = 'low'").get()).toEqual({ r: "stage", n: "Maybe next year" });
+});
+
+test("close the rest answers every open knock once, logs one audit row, and cannot be undone", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  await answerKnock(db, owner, "high", { answer: "yes" }, now - 60_000);
+  const closed = await closeRest(db, owner, now);
+  expect(closed.map((c) => c.to).sort()).toEqual(["a@x", "b@x"]);
+  expect(await listInbox(db, owner, now)).toEqual([]);
+  expect(sqlite.query("SELECT COUNT(*) n FROM decisions WHERE reason_code = 'bulk'").get()).toEqual({ n: 2 });
+  expect(sqlite.query("SELECT action, target FROM audit_log").all()).toEqual([{ action: "inbox.close_rest", target: "2 knocks" }]);
+  expect(sqlite.query("SELECT answered_in_window n FROM door_stats").get()).toEqual({ n: 3 });
+  expect(await undoKnock(db, owner, "low", now + 1_000)).toBe(false);
+  expect(await closeRest(db, owner, now + 2_000)).toEqual([]);
+  expect(sqlite.query("SELECT COUNT(*) n FROM audit_log").get()).toEqual({ n: 1 });
 });

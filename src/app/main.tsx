@@ -1,7 +1,7 @@
 import { hc } from "hono/client";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { keyAction, NOTE_MAX, REASONS, safeProof, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
+import { CLOSE_MESSAGE, keyAction, NOTE_MAX, REASONS, safeProof, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Api } from "../worker";
 import "../styles/theme.css";
 
@@ -53,6 +53,8 @@ const App = () => {
   const [error, setError] = useState("");
   const [reason, setReason] = useState<Reason | undefined>();
   const [note, setNote] = useState("");
+  const [info, setInfo] = useState("");
+  const confirm = useRef<HTMLDialogElement>(null);
   const [undo, setUndo] = useState<{ card: InboxCard; at: number; index: number } | null>(null);
 
   useEffect(() => {
@@ -94,6 +96,17 @@ const App = () => {
     else setError("Too late to undo.");
   }, [undo]);
 
+  const closeRest = async () => {
+    confirm.current?.close();
+    setError("");
+    const r = await api.inbox["close-rest"].$post().catch(() => null);
+    if (!r?.ok) return setError("Couldn't close your knocks. Nothing was changed.");
+    const { closed } = await r.json();
+    setCards([]);
+    setUndo(null);
+    setInfo(`Closed ${closed} ${closed === 1 ? "knock" : "knocks"}. Each sender was emailed.`);
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).closest("input, textarea")) return;
@@ -112,6 +125,7 @@ const App = () => {
     <main className="mx-auto max-w-[380px] px-5 py-10">
       <h1 className="text-[30px] font-extrabold">Inbox</h1>
       {error && <p role="alert" className="fixed inset-x-5 top-5 z-10 mx-auto max-w-[380px] rounded-lg bg-no p-3 text-sm text-on-accent shadow-e-2">{error}</p>}
+      {info && <p role="status" className="mt-4 rounded-md border border-line bg-card p-3 text-sm">{info}</p>}
       {cards && !card && (
         <section className="mt-6 rounded-lg border border-line bg-card p-5 shadow-e-1">
           <h2 className="text-lg font-bold">{undo ? "All answered" : "No knocks yet"}</h2>
@@ -145,9 +159,21 @@ const App = () => {
               </button>
             ))}
           </div>
+          <button className="mt-5 min-h-11 w-full rounded-pill border border-line font-medium" onClick={() => confirm.current?.showModal()}>
+            Close the rest ({cards!.length})
+          </button>
           <p className="mt-3 text-center font-mono text-xs text-muted">J/K move · Y yes · L not now · N no · U undo</p>
         </>
       )}
+      <dialog ref={confirm} className="m-auto max-w-[380px] rounded-lg border border-line bg-card p-5 text-ink backdrop:bg-black/50">
+        <h2 className="text-lg font-bold">Close {cards?.length ?? 0} open {cards?.length === 1 ? "knock" : "knocks"}?</h2>
+        <p className="mt-2 text-sm text-muted">Each sender gets this message by email. This can't be undone.</p>
+        <blockquote className="mt-3 border-l-2 border-brass pl-3 text-sm">{CLOSE_MESSAGE}</blockquote>
+        <div className="mt-5 flex gap-3">
+          <button className="min-h-11 flex-1 rounded-pill border border-line" onClick={() => confirm.current?.close()}>Cancel</button>
+          <button className="min-h-11 flex-1 rounded-pill bg-no font-medium text-on-accent" onClick={() => void closeRest()}>Close all</button>
+        </div>
+      </dialog>
       {undo && (
         <div role="status" className="fixed inset-x-5 bottom-5 mx-auto flex max-w-[380px] items-center justify-between rounded-lg bg-ink p-3 text-paper">
           <span>Answered.</span>
