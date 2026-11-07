@@ -76,31 +76,46 @@ const App = () => {
     let stop = false;
     let ids: string[] = [];
     const socks = new Map<string, WebSocket>();
+    let running = false;
+    let again = false;
     const refresh = async () => {
-      const r = await api.inbox.$get().catch(() => null);
-      if (!r?.ok || stop) return;
-      const cur = cardsRef.current;
-      const have = new Set(cur.map((c) => c.id));
-      const fresh = ((await r.json()) as InboxCard[]).filter((c) => !have.has(c.id) && !answered.current.has(c.id));
-      if (!fresh.length) return;
-      const curId = cur[iRef.current]?.id;
-      const merged = sortCards([...cur, ...fresh]);
-      setCards(merged);
-      setI(Math.max(0, merged.findIndex((c) => c.id === curId)));
-      setInfo("");
+      if (running) { again = true; return; }
+      running = true;
+      try {
+        do {
+          again = false;
+          const r = await api.inbox.$get().catch(() => null);
+          if (!r?.ok || stop) return;
+          const cur = cardsRef.current;
+          const have = new Set(cur.map((c) => c.id));
+          const fresh = ((await r.json()) as InboxCard[]).filter((c) => !have.has(c.id) && !answered.current.has(c.id));
+          if (!fresh.length) continue;
+          const curId = cur[iRef.current]?.id;
+          const merged = sortCards([...cur, ...fresh]);
+          const at = Math.max(0, merged.findIndex((c) => c.id === curId));
+          cardsRef.current = merged;
+          iRef.current = at;
+          setCards(merged);
+          setI(at);
+          setInfo("");
+        } while (again);
+      } finally {
+        running = false;
+      }
     };
     const connect = (id: string) => {
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/inbox-live/${id}`);
       socks.set(id, ws);
-      ws.onopen = () => void refresh();
       ws.onmessage = () => void refresh();
       ws.onclose = ws.onerror = () => { if (socks.get(id) === ws) socks.delete(id); };
     };
+    let first = true;
     const tick = async () => {
       const r = await api.inbox.doors.$get().catch(() => null);
       if (r?.ok && !stop) ids = await r.json();
       const down = ids.filter((id) => socks.get(id)?.readyState !== WebSocket.OPEN);
-      if (down.length || !ids.length) void refresh();
+      if (!first && (down.length || !ids.length)) void refresh();
+      first = false;
       for (const id of down) if (!socks.has(id)) connect(id);
     };
     void tick();
@@ -211,7 +226,7 @@ const App = () => {
           <p className="mt-3 text-center font-mono text-xs text-muted">J/K move · Y yes · L not now · N no · U undo</p>
         </>
       )}
-      <dialog ref={confirm} className="m-auto max-w-[380px] rounded-lg border border-line bg-card p-5 text-ink backdrop:bg-black/50">
+      <dialog ref={confirm} className="m-auto w-[calc(100%-2.5rem)] max-w-[380px] rounded-lg border border-line bg-card p-5 text-ink backdrop:bg-black/50">
         <h2 className="text-lg font-bold">Close {cards?.length ?? 0} open {cards?.length === 1 ? "knock" : "knocks"}?</h2>
         <p className="mt-2 text-sm text-muted">Each sender gets this message by email. This can't be undone.</p>
         <blockquote className="mt-3 border-l-2 border-brass pl-3 text-sm">{CLOSE_MESSAGE}</blockquote>
