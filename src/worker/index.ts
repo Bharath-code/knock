@@ -7,10 +7,13 @@ import { createDoorSchema, defaultFields, pickTemplate, PROFILE_SLUG, handleSche
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
-import { DoorPage, NewDoorPage, NotFoundDoor } from "./door-pages";
+import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
+import { sendReceipt, type Receipt } from "./email";
+import { getStatus } from "./knocks";
+import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
 import { createDoor, getDoor, ownerFromToken } from "./doors";
-import { gate, pruneLimits } from "./gate";
+import { gate, ipKey, pruneLimits } from "./gate";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
 
@@ -23,7 +26,7 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string };
+type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string };
 type AppEnv = { Bindings: Secrets };
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
@@ -160,13 +163,55 @@ const app = new Hono<AppEnv>()
     const door = await getDoor(c.env.DB, c.req.param("handle"), c.req.param("slug"));
     return door ? new Response((await ogPng(door)) as unknown as ArrayBuffer, { headers: { "content-type": "image/png", "cache-control": "public, max-age=300" } }) : c.notFound();
   })
+  .post("/d/:handle/:slug/knock", async (c) => {
+    const slug = c.req.param("slug");
+    const door = await getDoor(c.env.DB, c.req.param("handle"), slug);
+    if (!door || door.status !== "open") return c.html(NotFoundDoor(), 404);
+    const form = await c.req.parseBody({ all: true });
+    const one = (k: string) => (typeof form[k] === "string" ? (form[k] as string) : "");
+    const answers = [form.answer ?? []].flat().filter((v): v is string => typeof v === "string");
+    const source = asSource(c.req.query("s"));
+    const kept = { email: one("email").slice(0, 254), message: one("message").slice(0, 2000), answers, proof: one("proof").slice(0, 300) };
+    const path = `/d/${door.handle}/${slug}`;
+    const again = (error: string, status: 400 | 403 | 409 | 429 | 503) =>
+      c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: false, siteKey: c.env.TURNSTILE_SITE_KEY, source, form: { ...kept, error } }), status);
+    const parsed = knockSchema(door.fields.length).safeParse({ ...kept, consent: one("consent") });
+    if (!parsed.success) return again("Fill every question, add your message and a valid email, and tick the consent box.", 400);
+    const g = await gate(c.env, clientIp(c.req.raw), one("cf-turnstile-response"), "knock");
+    if (g !== "ok") return again(gateMessage[g], g === "limited" ? 429 : g === "captcha" ? 403 : 503);
+    const k = parsed.data;
+    const result = await c.env.DOOR.getByName(door.id).knock(
+      {
+        orgId: door.orgId, doorId: door.id, windowDays: door.windowDays, email: k.email, key: emailKey(k.email),
+        message: k.message, answers: door.fields.map((q, i) => ({ q, a: k.answers[i]! })), proof: k.proof, source,
+      },
+      ipKey(clientIp(c.req.raw)),
+    );
+    if (!result.ok) {
+      return result.reason === "duplicate"
+        ? again("You already knocked on this door. Check your email for your status link.", 409)
+        : again("Too many knocks from your network on this door. Try again in an hour.", 429);
+    }
+    const link = new URL(`/k/${result.token}`, c.req.url).href;
+    await c.env.JOBS.send({ type: "receipt", to: k.email, link, who: door.name || `@${door.handle}`, days: door.windowDays });
+    return c.redirect(`/k/${result.token}`, 303);
+  })
+  .get("/k/:token", async (c) => {
+    const token = c.req.param("token");
+    c.header("x-robots-tag", "noindex, nofollow");
+    c.header("cache-control", "private, no-store");
+    c.header("referrer-policy", "no-referrer");
+    const status = /^[0-9a-f]{32}$/.test(token) ? await getStatus(c.env.DB, token) : null;
+    if (!status) return c.html(NotFoundDoor(), 404);
+    return c.html(StatusPage({ s: status, link: new URL(`/k/${token}`, c.req.url).href }));
+  })
   .get("/d/:handle/:slug?", async (c) => {
     const handle = c.req.param("handle");
     const slug = c.req.param("slug") ?? PROFILE_SLUG;
     const door = await getDoor(c.env.DB, handle, slug);
     if (!door) return c.html(NotFoundDoor(), 404);
     const path = slug === PROFILE_SLUG ? `/d/${handle}` : `/d/${handle}/${slug}`;
-    return c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: c.req.query("made") === "1" }));
+    return c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: c.req.query("made") === "1", siteKey: c.env.TURNSTILE_SITE_KEY, source: asSource(c.req.query("s")) }));
   })
   .get("/app/*", (c) => c.env.ASSETS.fetch(new URL("/", c.req.url)))
   .get("/app", (c) => c.env.ASSETS.fetch(new URL("/", c.req.url)))
@@ -176,10 +221,22 @@ const app = new Hono<AppEnv>()
 
 export default {
   fetch: app.fetch,
-  async queue(batch) {
+  async queue(batch, env) {
     for (const message of batch.messages) {
-      console.log("job", message.body);
-      message.ack();
+      const job = message.body as { type?: string } & Receipt;
+      if (job.type !== "receipt") {
+        console.log("job", job.type);
+        message.ack();
+        continue;
+      }
+      try {
+        const sent = await sendReceipt(env as Secrets, job);
+        if (sent === "unconfigured") console.warn("receipt not sent: RESEND_API_KEY or EMAIL_FROM missing");
+        message.ack();
+      } catch (e) {
+        console.error("receipt failed", e instanceof Error ? e.message : e);
+        message.retry({ delaySeconds: 30 });
+      }
     }
   },
   async scheduled(event, env) {
