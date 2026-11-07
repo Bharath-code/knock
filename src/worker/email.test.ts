@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sendReceipt, sendYes } from "./email";
+import { sendReceipt, sendYes, stripLinks } from "./email";
 
 const r = { to: "a@x.com", link: "https://d.dev/k/abc", who: "Akash", days: 7 };
 const reply = (status: number, seen: { body?: string }) =>
@@ -28,4 +28,15 @@ test("yes email carries the note and the booking link, and works without a link"
   expect(JSON.parse(seen.body!).text).toBe("Akash said yes to your knock.\n\nHappy to chat\n\nPick a time that works: https://cal.com/akash/15");
   await sendYes(env, { to: "a@x.com", who: "Akash", url: null, note: null }, reply(200, seen));
   expect(JSON.parse(seen.body!).text).toBe("Akash said yes to your knock.");
+});
+
+test("yes email strips links from the note and newlines from the name", async () => {
+  expect(stripLinks("Call me: https://evil.co/x or www.evil.co or evil.co/pay\nthanks")).toBe("Call me: [link removed] or [link removed] or [link removed] thanks");
+  expect(stripLinks("Happy to chat")).toBe("Happy to chat");
+  const seen: { body?: string } = {};
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  await sendYes(env, { to: "a@x.com", who: "Akash\nPay at evil.co", url: "https://cal.com/a/15", note: "see https://evil.co" }, reply(200, seen));
+  const b = JSON.parse(seen.body!);
+  expect(b.subject).toBe("Akash Pay at [link removed] said yes");
+  expect(b.text).toBe("Akash Pay at [link removed] said yes to your knock.\n\nsee [link removed]\n\nPick a time that works: https://cal.com/a/15");
 });

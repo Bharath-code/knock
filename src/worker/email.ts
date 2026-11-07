@@ -32,8 +32,13 @@ export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetc
 
 export type Yes = { to: string; who: string; url: string | null; note: string | null };
 
-export const sendYes = async (env: MailEnv, r: Yes, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+// ponytail: regex, so a bare "Node.js" is also masked; the booking link is the only link channel in a Yes
+export const stripLinks = (s: string) => oneLine(s.replace(/\b(?:https?:\/\/|www\.)\S+|\b[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}(?:\/\S*)?/gi, "[link removed]"));
+
+export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const r = { ...raw, who: stripLinks(raw.who), note: raw.note && stripLinks(raw.note) };
   const parts = [`${r.who} said yes to your knock.`, r.note, r.url && `Pick a time that works: ${r.url}`].filter(Boolean);
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
