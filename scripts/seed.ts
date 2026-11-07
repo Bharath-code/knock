@@ -23,7 +23,7 @@ const sql: string[] = [
   "DELETE FROM orgs WHERE id LIKE 'seed-%';",
   "DELETE FROM people WHERE id LIKE 'seed-%';",
   row("orgs", { id: "seed-org", name: "seed_akash", created_at: now }),
-  row("people", { id: "seed-owner", email: "seed-owner@anon.doorbell.invalid", email_hash: sha("seed-owner"), display_name: "Akash (seed)", handle: "seed_akash", created_at: now }),
+  row("people", { id: "seed-owner", email: "seed-owner@anon.doorbell.invalid", email_hash: sha("seed-owner"), display_name: "Akash (seed)", handle: "seed_akash", owner_token_hash: sha("seed-owner-token"), created_at: now }),
   row("users", { id: "seed-user", org_id: "seed-org", person_id: "seed-owner", role: "owner", created_at: now }),
 ];
 
@@ -79,4 +79,4 @@ if (run.exitCode !== 0) {
   console.error(run.stderr.toString() || run.stdout.toString());
   process.exit(1);
 }
-console.log(`Seeded ${target}: 5 doors under /d/seed_akash, 8 knocks.\nStatus pages:\n  ${tokens.join("\n  ")}`);
+console.log(`Seeded ${target}: 5 doors under /d/seed_akash, 8 knocks.\nInbox: set cookie ds=seed-owner-token, then open /app\nStatus pages:\n  ${tokens.join("\n  ")}`);
