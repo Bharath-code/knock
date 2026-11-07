@@ -32,8 +32,16 @@ export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetc
 
 export type Yes = { to: string; who: string; url: string | null; note: string | null };
 
-export const sendYes = async (env: MailEnv, r: Yes, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+// ponytail: regex, so a bare "Node.js" is also masked; the booking link is the only link channel in a Yes
+const LINK =
+  /(?<![\p{L}\p{N}_-])[a-z][a-z0-9+.-]*:\/\/\S+|(?<![\p{L}\p{N}_-])(?:mailto|javascript|data|tel):\S+|(?<![\p{L}\p{N}_-])www\.\S+|(?<!\d)\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:\/\S*)?|(?<![\p{L}\p{N}_-])[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*\.\p{L}{2,}(?:\/\S*)?/giu;
+// NFKC folds fullwidth dots and letters; the ideographic stops are not folded, so map them too.
+export const stripLinks = (s: string) => oneLine(s.normalize("NFKC").replace(/[。｡]/g, ".").replace(LINK, "[link removed]"));
+
+export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const r = { ...raw, who: stripLinks(raw.who), note: raw.note && stripLinks(raw.note) };
   const parts = [`${r.who} said yes to your knock.`, r.note, r.url && `Pick a time that works: ${r.url}`].filter(Boolean);
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
