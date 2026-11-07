@@ -22,7 +22,7 @@ export const Home = () => (
           one tap, and nobody is left waiting.
         </p>
         <p class="mt-5 text-[13px] font-medium text-muted">
-          Being built now. The free DM checker comes first.
+          Being built now. <a href="/check">Try the free DM checker.</a>
         </p>
       </main>
     </body>
