@@ -8,11 +8,14 @@
     "test": "bun test src",
     "typecheck": "wrangler types && tsc --noEmit",
     "db:local": "wrangler d1 migrations apply doorbell --local",
-    "db:remote": "wrangler d1 migrations apply doorbell --remote",
     "smoke": "bun scripts/smoke.ts",
     "check:model": "bun scripts/check-model.ts",
     "lighthouse": "lhci autorun",
-    "deploy": "bun run build && bun run db:remote && wrangler deploy && bun run lighthouse"
+    "db:staging": "wrangler d1 migrations apply doorbell-staging --remote --env staging",
+    "db:live": "wrangler d1 migrations apply doorbell --remote",
+    "smoke:staging": "bun scripts/smoke.ts https://doorbell-staging.kumarbharath63.workers.dev",
+    "deploy:staging": "CLOUDFLARE_ENV=staging vite build && bun run db:staging && wrangler deploy",
+    "deploy:live": "vite build && bun run db:live && wrangler deploy && bun run lighthouse"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

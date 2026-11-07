@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 
 const base = process.argv[2] ?? "http://localhost:5173";
 const local = base.includes("localhost");
-const token = /^SMOKE_TOKEN=(.+)$/m.exec(readFileSync(".dev.vars", "utf8"))?.[1];
-if (!token) throw new Error("SMOKE_TOKEN missing from .dev.vars");
+const vars = local ? ".dev.vars" : ".dev.vars.staging";
+if (/doorbell\.kumarbharath63\.workers\.dev/.test(base)) throw new Error("Refusing to run against live. See CLAUDE.md.");
+const token = /^SMOKE_TOKEN=(.+)$/m.exec(readFileSync(vars, "utf8"))?.[1];
+if (!token) throw new Error(`SMOKE_TOKEN missing from ${vars}`);
 
 let failed = false;
 const assert = (name: string, ok: boolean, detail = "") => {
