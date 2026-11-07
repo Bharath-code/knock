@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { keyAction, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
+import { bookingUrl } from "../shared/booking";
+import { getBooking, setBooking, stillYes, yesJob } from "./booking";
 import { answerKnock, closeRest, listInbox, undoKnock } from "./inbox";
 
 const fakeDb = async () => {
@@ -87,4 +89,30 @@ test("close the rest answers every open knock once, logs one audit row, and cann
 test("client sort matches the server order", () => {
   const c = (id: string, fit: number | null, createdAt: number) => ({ id, fit, createdAt }) as InboxCard;
   expect(sortCards([c("none", null, 1), c("low", 2, 5), c("high-new", 5, 9), c("high-old", 5, 3)]).map((x) => x.id)).toEqual(["high-old", "high-new", "low", "none"]);
+});
+
+test("booking links must be https on cal.com or calendly.com", () => {
+  const ok = ["https://cal.com/x", "https://app.cal.com/x/15", "https://calendly.com/x", " https://calendly.com/x/30min "];
+  const bad = ["http://cal.com/x", "javascript:alert(1)", "https://calendly.com.evil.com/x", "https://evilcal.com/x", "https://user:pw@cal.com/x", "cal.com/x", "", null];
+  expect(ok.map(bookingUrl).every(Boolean)).toBe(true);
+  expect(bad.map(bookingUrl)).toEqual(bad.map(() => null));
+});
+
+test("yes job carries the booking link and is skipped after undo or a re-answer", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  expect(await setBooking(db, owner, "https://cal.com/akash/15")).toBe(true);
+  expect(await getBooking(db, owner)).toBe("https://cal.com/akash/15");
+  await answerKnock(db, owner, "high", { answer: "yes", note: "Happy to chat" }, now);
+  expect(await yesJob(db, owner, "high", now)).toEqual({ type: "yes", to: "c@x", note: "Happy to chat", url: "https://cal.com/akash/15", knockId: "high", at: now });
+  expect(await stillYes(db, "high", now)).toBe(true);
+  await undoKnock(db, owner, "high", now + 1_000);
+  expect(await stillYes(db, "high", now)).toBe(false);
+  await answerKnock(db, owner, "high", { answer: "yes" }, now + 2_000);
+  expect(await stillYes(db, "high", now)).toBe(false);
+  expect(await stillYes(db, "high", now + 2_000)).toBe(true);
+  expect(await yesJob(db, owner, "low", now)).toBeNull();
+  await setBooking(db, owner, null);
+  expect(await getBooking(db, owner)).toBeNull();
 });

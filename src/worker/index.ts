@@ -8,7 +8,9 @@ import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
-import { sendClosure, sendReceipt, type Closure, type Receipt } from "./email";
+import { sendClosure, sendReceipt, sendYes, type Closure, type Receipt } from "./email";
+import { bookingUrl, YES_DELAY_S } from "../shared/booking";
+import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking";
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
@@ -65,8 +67,26 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
       return { answer, reason, note } as Reply;
     }),
     async (c) => {
-    const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), c.req.valid("json"));
-    return ok ? c.json({ ok: true }) : c.json({ error: "That knock is no longer open." }, 409);
+    const at = Date.now();
+    const reply = c.req.valid("json");
+    const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), reply, at);
+    if (!ok) return c.json({ error: "That knock is no longer open." }, 409);
+    if (reply.answer === "yes") {
+      const job = await yesJob(c.env.DB, c.get("owner"), c.req.param("id"), at);
+      const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
+      const who = owner?.name || `@${owner?.handle ?? "your door"}`;
+      if (job) await c.env.JOBS.send({ ...job, who }, { delaySeconds: YES_DELAY_S });
+    }
+    return c.json({ ok: true });
+  })
+  .get("/booking", async (c) => c.json({ url: await getBooking(c.env.DB, c.get("owner")) }))
+  .put("/booking", async (c) => {
+    const raw = ((await c.req.json().catch(() => ({}))) as { url?: unknown }).url;
+    const blank = typeof raw === "string" && raw.trim() === "";
+    const url = blank ? null : bookingUrl(raw);
+    if (!blank && !url) return c.json({ error: "Use an https link on cal.com or calendly.com." }, 400);
+    await setBooking(c.env.DB, c.get("owner"), url);
+    return c.json({ url });
   })
   .get("/doors", async (c) => c.json(await ownerDoorIds(c.env.DB, c.get("owner"))))
   .post("/close-rest", async (c) => {
@@ -272,14 +292,18 @@ export default {
   fetch: app.fetch,
   async queue(batch, env) {
     for (const message of batch.messages) {
-      const job = message.body as { type?: string } & Receipt & Closure;
-      if (job.type !== "receipt" && job.type !== "closure") {
+      const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type">;
+      if (job.type !== "receipt" && job.type !== "closure" && job.type !== "yes") {
         console.log("job", job.type);
         message.ack();
         continue;
       }
       try {
-        const sent = await (job.type === "receipt" ? sendReceipt(env as Secrets, job) : sendClosure(env as Secrets, job));
+        if (job.type === "yes" && !(await stillYes(env.DB, job.knockId, job.at))) {
+          message.ack();
+          continue;
+        }
+        const sent = await (job.type === "receipt" ? sendReceipt(env as Secrets, job) : job.type === "yes" ? sendYes(env as Secrets, job) : sendClosure(env as Secrets, job));
         if (sent === "unconfigured") console.warn(`${job.type} not sent: RESEND_API_KEY or EMAIL_FROM missing`);
         message.ack();
       } catch (e) {

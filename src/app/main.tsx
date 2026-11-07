@@ -54,6 +54,7 @@ const App = () => {
   const [reason, setReason] = useState<Reason | undefined>();
   const [note, setNote] = useState("");
   const [info, setInfo] = useState("");
+  const [booking, setBooking] = useState("");
   const confirm = useRef<HTMLDialogElement>(null);
   const [undo, setUndo] = useState<{ card: InboxCard; at: number; index: number } | null>(null);
 
@@ -63,6 +64,18 @@ const App = () => {
       setCards((await r.json()) as InboxCard[]);
     }).catch(() => setError("Couldn't load your inbox."));
   }, []);
+
+  useEffect(() => {
+    api.inbox.booking.$get().then(async (r) => r.ok && setBooking((await r.json()).url ?? "")).catch(() => {});
+  }, []);
+
+  const saveBooking = async () => {
+    setError("");
+    const r = await api.inbox.booking.$put({ json: { url: booking } }).catch(() => null);
+    if (!r?.ok) return setError(r?.status === 400 ? "Use an https link on cal.com or calendly.com." : "Couldn't save your booking link.");
+    setBooking((await r.json()).url ?? "");
+    setInfo(booking.trim() ? "Booking link saved. Senders you say Yes to will get it." : "Booking link removed.");
+  };
 
   const cardsRef = useRef<InboxCard[]>([]);
   const iRef = useRef(0);
@@ -226,6 +239,14 @@ const App = () => {
           <p className="mt-3 text-center font-mono text-xs text-muted">J/K move · Y yes · L not now · N no · U undo</p>
         </>
       )}
+      <details className="mt-8 rounded-lg border border-line bg-card p-4">
+        <summary className="min-h-11 cursor-pointer font-medium leading-[44px]">Booking link</summary>
+        <label className="block text-sm text-muted">
+          Cal.com or Calendly link, sent with every Yes
+          <input type="url" value={booking} maxLength={300} placeholder="https://cal.com/you/15min" onChange={(e) => setBooking(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink" />
+        </label>
+        <button className="mt-3 min-h-11 w-full rounded-pill border border-line font-medium" onClick={() => void saveBooking()}>Save</button>
+      </details>
       <dialog ref={confirm} className="m-auto w-[calc(100%-2.5rem)] max-w-[380px] rounded-lg border border-line bg-card p-5 text-ink backdrop:bg-black/50">
         <h2 className="text-lg font-bold">Close {cards?.length ?? 0} open {cards?.length === 1 ? "knock" : "knocks"}?</h2>
         <p className="mt-2 text-sm text-muted">Each sender gets this message by email. This can't be undone.</p>
