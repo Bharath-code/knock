@@ -15,7 +15,9 @@
     "db:live": "wrangler d1 migrations apply doorbell --remote",
     "smoke:staging": "bun scripts/smoke.ts https://doorbell-staging.kumarbharath63.workers.dev",
     "deploy:staging": "CLOUDFLARE_ENV=staging vite build && bun run db:staging && wrangler deploy",
-    "deploy:live": "vite build && bun run db:live && wrangler deploy && bun run lighthouse"
+    "deploy:live": "vite build && bun run db:live && wrangler deploy && bun run lighthouse",
+    "seed:local": "bun scripts/seed.ts local",
+    "seed:staging": "bun scripts/seed.ts staging"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
