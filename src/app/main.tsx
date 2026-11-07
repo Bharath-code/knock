@@ -1,6 +1,7 @@
 import { hc } from "hono/client";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { closureMessage } from "../shared/closure";
 import { CLOSE_MESSAGE, keyAction, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Pool } from "../shared/codes";
 import type { Api } from "../worker";
@@ -253,10 +254,14 @@ const App = () => {
               ))}
             </div>
             <label className="mt-3 block text-sm text-muted">
-              Note to sender (optional)
-              <textarea value={note} maxLength={NOTE_MAX} rows={2} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink" />
+              Message to sender (optional)
+              <textarea value={note} maxLength={NOTE_MAX} rows={2} placeholder="Leave empty to send the kind default below" onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink" />
             </label>
             <p className="text-right font-mono text-xs text-muted">{note.length}/{NOTE_MAX}</p>
+            <dl className="mt-1 space-y-2 text-xs text-muted">
+              <div><dt className="font-medium">No sends</dt><dd>{closureMessage(card.template, "no")}</dd></div>
+              <div><dt className="font-medium">Not now sends</dt><dd>{closureMessage(card.template, "later")}</dd></div>
+            </dl>
           </fieldset>
           <div className="mt-5 grid grid-cols-3 gap-3">
             {(["no", "later", "yes"] as const).map((a) => (

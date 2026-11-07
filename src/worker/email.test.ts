@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sendReceipt, sendYes, stripLinks } from "./email";
+import { sendClosure, sendReceipt, sendYes, stripLinks } from "./email";
 
 const r = { to: "a@x.com", link: "https://d.dev/k/abc", who: "Akash", days: 7 };
 const reply = (status: number, seen: { body?: string }) =>
@@ -52,4 +52,13 @@ test("yes email carries the invite code before the booking link", async () => {
   const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
   await sendYes(env, { to: "a@x.com", who: "Akash", url: "https://cal.com/a/15", note: null, code: "BETA-1234" }, reply(200, seen));
   expect(JSON.parse(seen.body!).text).toBe("Akash said yes to your knock.\n\nYour invite code: BETA-1234\n\nPick a time that works: https://cal.com/a/15");
+});
+
+test("closure email uses the kind message, a distinct subject for Not now, and strips links", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  const seen: { body?: string } = {};
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Thanks. See https://evil.co" }, reply(200, seen));
+  expect(JSON.parse(seen.body!)).toMatchObject({ subject: "Akash closed your knock", text: "Thanks. See [link removed]\n\n(Akash answered through Doorbell.)" });
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Later", later: true }, reply(200, seen));
+  expect(JSON.parse(seen.body!).subject).toBe("Akash replied to your knock");
 });

@@ -10,6 +10,8 @@ import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
 import { sendClosure, sendReceipt, sendYes, type Closure, type Receipt } from "./email";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
+import { closureMessage } from "../shared/closure";
+import { closeJob, knockTemplate, stillAnswered, type CloseJob } from "./closure";
 import { MAX_CODES, parseCodes } from "../shared/codes";
 import { addCodes, codeFor, pools, yesCode } from "./codes";
 import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking";
@@ -70,7 +72,11 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     }),
     async (c) => {
     const at = Date.now();
-    const reply = c.req.valid("json");
+    const reply = { ...c.req.valid("json") };
+    if (reply.answer !== "yes" && !reply.note) {
+      const template = await knockTemplate(c.env.DB, c.get("owner"), c.req.param("id"));
+      if (template) reply.note = closureMessage(template, reply.answer);
+    }
     const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), reply, at);
     if (!ok) return c.json({ error: "That knock is no longer open." }, 409);
     let code: Awaited<ReturnType<typeof yesCode>> = "none";
@@ -80,6 +86,12 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
       const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
       const who = owner?.name || `@${owner?.handle ?? "your door"}`;
       if (job) await c.env.JOBS.send({ ...job, who }, { delaySeconds: YES_DELAY_S });
+    } else {
+      const job = await closeJob(c.env.DB, c.get("owner"), c.req.param("id"), at);
+      if (job) {
+        const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
+        await c.env.JOBS.send({ ...job, who: owner?.name || `@${owner?.handle ?? "your door"}` }, { delaySeconds: YES_DELAY_S });
+      }
     }
     return c.json({ ok: true, code });
   })
@@ -309,14 +321,14 @@ export default {
   fetch: app.fetch,
   async queue(batch, env) {
     for (const message of batch.messages) {
-      const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type">;
+      const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type"> & Partial<Pick<CloseJob, "later">>;
       if (job.type !== "receipt" && job.type !== "closure" && job.type !== "yes") {
         console.log("job", job.type);
         message.ack();
         continue;
       }
       try {
-        if (job.type === "yes" && !(await stillYes(env.DB, job.knockId, job.at))) {
+        if ((job.type === "yes" && !(await stillYes(env.DB, job.knockId, job.at))) || (job.type === "closure" && job.knockId && !(await stillAnswered(env.DB, job.knockId, job.at)))) {
           message.ack();
           continue;
         }
