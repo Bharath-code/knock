@@ -34,11 +34,15 @@ test("IPv6 addresses in one /64 share a key; IPv4 and mapped IPv4 are kept whole
   expect(ipKey("unknown")).toBe("unknown");
 });
 
-test("turnstile passes only on success:true and fails closed on errors or empty tokens", async () => {
+test("turnstile needs success, the right action and an allowed hostname; fails closed on errors or empty tokens", async () => {
   const reply = (body: unknown) => (async () => Response.json(body)) as unknown as typeof fetch;
-  expect(await verifyTurnstile("s", "tok", "1.1.1.1", reply({ success: true }))).toBe(true);
-  expect(await verifyTurnstile("s", "tok", "1.1.1.1", reply({ success: false }))).toBe(false);
-  expect(await verifyTurnstile("s", "", "1.1.1.1", reply({ success: true }))).toBe(false);
+  const ok = { success: true, action: "check", hostname: "doorbell.example" };
+  const hosts = ["doorbell.example"];
+  expect(await verifyTurnstile("s", "tok", "1.1.1.1", hosts, reply(ok))).toBe(true);
+  expect(await verifyTurnstile("s", "tok", "1.1.1.1", hosts, reply({ ...ok, success: false }))).toBe(false);
+  expect(await verifyTurnstile("s", "tok", "1.1.1.1", hosts, reply({ ...ok, action: "other" }))).toBe(false);
+  expect(await verifyTurnstile("s", "tok", "1.1.1.1", hosts, reply({ ...ok, hostname: "evil.example" }))).toBe(false);
+  expect(await verifyTurnstile("s", "", "1.1.1.1", hosts, reply(ok))).toBe(false);
   const boom = (async () => { throw new Error("net"); }) as unknown as typeof fetch;
-  expect(await verifyTurnstile("s", "tok", "1.1.1.1", boom)).toBe(false);
+  expect(await verifyTurnstile("s", "tok", "1.1.1.1", hosts, boom)).toBe(false);
 });

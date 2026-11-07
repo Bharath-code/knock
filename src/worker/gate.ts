@@ -4,10 +4,13 @@ const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export type Gate = "ok" | "captcha" | "limited" | "unconfigured";
 
+export const TURNSTILE_ACTION = "check";
+
 export const verifyTurnstile = async (
   secret: string,
   token: string,
   ip: string,
+  hostnames: string[],
   fetcher: typeof fetch = fetch,
 ) => {
   if (!token) return false;
@@ -17,7 +20,8 @@ export const verifyTurnstile = async (
   body.set("remoteip", ip);
   try {
     const res = await fetcher(SITEVERIFY, { method: "POST", body });
-    return ((await res.json()) as { success?: boolean }).success === true;
+    const out = (await res.json()) as { success?: boolean; action?: string; hostname?: string };
+    return out.success === true && out.action === TURNSTILE_ACTION && hostnames.includes(out.hostname ?? "");
   } catch {
     return false;
   }
@@ -51,11 +55,12 @@ export const ipKey = (ip: string) => {
 
 // Fails closed: with no secret the paid model route stays shut.
 export const gate = async (
-  env: { DB: D1Database; TURNSTILE_SECRET?: string },
+  env: { DB: D1Database; TURNSTILE_SECRET?: string; TURNSTILE_HOSTNAMES?: string },
   ip: string,
   token: string,
 ): Promise<Gate> => {
-  if (!env.TURNSTILE_SECRET) return "unconfigured";
-  if (!(await verifyTurnstile(env.TURNSTILE_SECRET, token, ip))) return "captcha";
+  const hostnames = (env.TURNSTILE_HOSTNAMES ?? "").split(",").map((h) => h.trim()).filter(Boolean);
+  if (!env.TURNSTILE_SECRET || hostnames.length === 0) return "unconfigured";
+  if (!(await verifyTurnstile(env.TURNSTILE_SECRET, token, ip, hostnames))) return "captcha";
   return (await withinLimit(env.DB, `check:${ipKey(ip)}`)) ? "ok" : "limited";
 };

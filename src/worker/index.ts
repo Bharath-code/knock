@@ -18,7 +18,7 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string };
+type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string };
 type AppEnv = { Bindings: Secrets };
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";

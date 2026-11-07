@@ -126,7 +126,7 @@ export const CheckerPage = ({ post = "", draft = "", siteKey, error, rules, mode
             <label for="draft" class="font-medium">Your DM</label>
             <textarea id="draft" name="draft" rows={6} maxlength={10000} required class="mt-1 w-full rounded-md border border-line bg-card p-3">{draft}</textarea>
           </div>
-          {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} />}
+          {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="check" />}
           <button type="submit" class="min-h-11 w-full rounded-pill bg-brass px-6 font-medium text-on-accent sm:w-auto">
             Check my DM
           </button>

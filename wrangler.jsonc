@@ -6,6 +6,10 @@
   "upload_source_maps": true,
   "workers_dev": true,
   "preview_urls": false,
+  "vars": {
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAF3S6H_ZkmksK2ut",
+    "TURNSTILE_HOSTNAMES": "doorbell.kumarbharath63.workers.dev"
+  },
   "observability": { "enabled": true },
   "assets": {
     "binding": "ASSETS",
