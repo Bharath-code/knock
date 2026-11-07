@@ -34,7 +34,10 @@ export type Yes = { to: string; who: string; url: string | null; note: string | 
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 // ponytail: regex, so a bare "Node.js" is also masked; the booking link is the only link channel in a Yes
-export const stripLinks = (s: string) => oneLine(s.replace(/\b(?:https?:\/\/|www\.)\S+|\b[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}(?:\/\S*)?/gi, "[link removed]"));
+const LINK =
+  /(?<![\p{L}\p{N}_-])[a-z][a-z0-9+.-]*:\/\/\S+|(?<![\p{L}\p{N}_-])(?:mailto|javascript|data|tel):\S+|(?<![\p{L}\p{N}_-])www\.\S+|(?<!\d)\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:\/\S*)?|(?<![\p{L}\p{N}_-])[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*\.\p{L}{2,}(?:\/\S*)?/giu;
+// NFKC folds fullwidth dots and letters; the ideographic stops are not folded, so map them too.
+export const stripLinks = (s: string) => oneLine(s.normalize("NFKC").replace(/[。｡]/g, ".").replace(LINK, "[link removed]"));
 
 export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";

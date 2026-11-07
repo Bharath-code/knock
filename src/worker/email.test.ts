@@ -33,6 +33,12 @@ test("yes email carries the note and the booking link, and works without a link"
 test("yes email strips links from the note and newlines from the name", async () => {
   expect(stripLinks("Call me: https://evil.co/x or www.evil.co or evil.co/pay\nthanks")).toBe("Call me: [link removed] or [link removed] or [link removed] thanks");
   expect(stripLinks("Happy to chat")).toBe("Happy to chat");
+  const gone = (s: string) => expect(stripLinks(s)).toBe("[link removed]");
+  [
+    "ftp://evil.co/x", "chrome-extension://abcdef/p", "javascript:alert(1)", "mailto:a@evil.co", "1.2.3.4", "10.0.0.1:8080/pay",
+    "evil。co", "evil｡co/pay", "ｅｖｉｌ．ｃｏ", "ｈｔｔｐｓ：／／ｅｖｉｌ．ｃｏ", "例え.jp", "пример.рф/pay", "bücher.de",
+  ].forEach(gone);
+  expect(stripLinks("Call 1.2.3 or v2.0, thanks!")).toBe("Call 1.2.3 or v2.0, thanks!");
   const seen: { body?: string } = {};
   const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
   await sendYes(env, { to: "a@x.com", who: "Akash\nPay at evil.co", url: "https://cal.com/a/15", note: "see https://evil.co" }, reply(200, seen));
