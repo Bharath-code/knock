@@ -10,6 +10,8 @@ import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
 import { sendClosure, sendReceipt, sendYes, type Closure, type Receipt } from "./email";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
+import { MAX_CODES, parseCodes } from "../shared/codes";
+import { addCodes, codeFor, pools, yesCode } from "./codes";
 import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking";
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
@@ -30,7 +32,7 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string };
+type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string };
 type AppEnv = { Bindings: Secrets };
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
@@ -71,13 +73,28 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     const reply = c.req.valid("json");
     const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), reply, at);
     if (!ok) return c.json({ error: "That knock is no longer open." }, 409);
+    let code: Awaited<ReturnType<typeof yesCode>> = "none";
     if (reply.answer === "yes") {
+      code = await yesCode(c.env.DB, c.req.param("id"));
       const job = await yesJob(c.env.DB, c.get("owner"), c.req.param("id"), at);
       const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
       const who = owner?.name || `@${owner?.handle ?? "your door"}`;
       if (job) await c.env.JOBS.send({ ...job, who }, { delaySeconds: YES_DELAY_S });
     }
-    return c.json({ ok: true });
+    return c.json({ ok: true, code });
+  })
+  .get("/codes", async (c) => c.json(await pools(c.env.DB, c.get("owner"))))
+  .post("/codes", async (c) => {
+    if (!c.env.CODES_KEY) return c.json({ error: "Invite codes aren't set up yet." }, 503);
+    const b = (await c.req.json().catch(() => ({}))) as { doorId?: unknown; text?: unknown };
+    const o = c.get("owner");
+    if (typeof b.doorId !== "string" || typeof b.text !== "string" || b.text.length > 100_000 || !(await ownsDoor(c.env.DB, o, b.doorId))) {
+      return c.json({ error: "Pick one of your doors and paste your codes." }, 400);
+    }
+    const { codes, bad } = parseCodes(b.text);
+    if (bad.length) return c.json({ error: `Codes use 4 to 64 letters, digits, - or _. Fix: ${bad.slice(0, 3).join(", ")}` }, 400);
+    if (!codes.length || codes.length > MAX_CODES) return c.json({ error: `Add between 1 and ${MAX_CODES} codes at a time.` }, 400);
+    return c.json(await addCodes(c.env.DB, c.env.CODES_KEY, b.doorId, o.orgId, codes));
   })
   .get("/booking", async (c) => c.json({ url: await getBooking(c.env.DB, c.get("owner")) }))
   .put("/booking", async (c) => {
@@ -303,7 +320,11 @@ export default {
           message.ack();
           continue;
         }
-        const sent = await (job.type === "receipt" ? sendReceipt(env as Secrets, job) : job.type === "yes" ? sendYes(env as Secrets, job) : sendClosure(env as Secrets, job));
+        const sent = await (job.type === "receipt"
+          ? sendReceipt(env as Secrets, job)
+          : job.type === "yes"
+            ? sendYes(env as Secrets, { ...job, code: await codeFor(env.DB, (env as Secrets).CODES_KEY, job.knockId) })
+            : sendClosure(env as Secrets, job));
         if (sent === "unconfigured") console.warn(`${job.type} not sent: RESEND_API_KEY or EMAIL_FROM missing`);
         message.ack();
       } catch (e) {

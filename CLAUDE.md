@@ -17,7 +17,7 @@ Per task: build and test locally, then deploy to staging, run the staging smoke 
 ## Go-live checklist (do together, once, on the user's word)
 
 - Apply pending migrations to live with `bun run db:live`, before deploying code.
-- Set live secrets: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `TURNSTILE_SECRET`, `SMOKE_TOKEN`.
+- Set live secrets: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `TURNSTILE_SECRET`, `SMOKE_TOKEN`, `CODES_KEY` (`openssl rand -base64 32`; encrypts invite codes, and rotating it strands every unassigned code).
 - Live `EMAIL_FROM` must be an address on a domain verified in Resend. Staging uses `onboarding@resend.dev`, which only delivers to the Resend account owner and `resend.dev` sinks, so real senders get no receipt or closure email until the domain is verified.
 - Spend limit on the live Anthropic key and a global daily budget on the model route (see the DEM-55 comment).
 - Live Turnstile widget lists the live hostname.

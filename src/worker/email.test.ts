@@ -46,3 +46,10 @@ test("yes email strips links from the note and newlines from the name", async ()
   expect(b.subject).toBe("Akash Pay at [link removed] said yes");
   expect(b.text).toBe("Akash Pay at [link removed] said yes to your knock.\n\nsee [link removed]\n\nPick a time that works: https://cal.com/a/15");
 });
+
+test("yes email carries the invite code before the booking link", async () => {
+  const seen: { body?: string } = {};
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  await sendYes(env, { to: "a@x.com", who: "Akash", url: "https://cal.com/a/15", note: null, code: "BETA-1234" }, reply(200, seen));
+  expect(JSON.parse(seen.body!).text).toBe("Akash said yes to your knock.\n\nYour invite code: BETA-1234\n\nPick a time that works: https://cal.com/a/15");
+});
