@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sendClosure, sendReceipt, sendYes, stripLinks } from "./email";
+import { sendClosure, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
 
 const r = { to: "a@x.com", link: "https://d.dev/k/abc", who: "Akash", days: 7 };
 const reply = (status: number, seen: { body?: string }) =>
@@ -68,4 +68,16 @@ test("expired closure email has its own subject and no 'answered' footer", async
   const seen: { body?: string } = {};
   await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Akash didn't get to your knock.", expired: true }, reply(200, seen));
   expect(JSON.parse(seen.body!)).toMatchObject({ subject: "Akash didn't get to your knock", text: "Akash didn't get to your knock." });
+});
+
+test("sign-in email carries the link and says when it expires; a claim names the door", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  const seen: { body?: string } = {};
+  await sendSignIn(env, { to: "a@x.com", link: "https://d.dev/signin/confirm?t=abc" }, reply(200, seen));
+  expect(JSON.parse(seen.body!)).toMatchObject({ subject: "Your Doorbell sign-in link", text: expect.stringContaining("https://d.dev/signin/confirm?t=abc") });
+  expect(JSON.parse(seen.body!).text).toContain("15 minutes");
+  await sendSignIn(env, { to: "a@x.com", link: "https://d.dev/x", handle: "akash" }, reply(200, seen));
+  expect(JSON.parse(seen.body!).subject).toBe("Confirm your email for @akash");
+  expect(sendSignIn(env, { to: "a@x.com", link: "l" }, reply(500, {}))).rejects.toThrow("email provider 500");
+  expect(await sendSignIn({}, { to: "a@x.com", link: "l" })).toBe("unconfigured");
 });

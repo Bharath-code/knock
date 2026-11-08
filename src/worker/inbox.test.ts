@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { keyAction, NOTE_MAX, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
 import { bookingUrl } from "../shared/booking";
@@ -8,30 +8,8 @@ import { closeExpired, nextExpiry } from "./expire";
 import { closeJob, knockTemplate, stillAnswered } from "./closure";
 import { getBooking, setBooking, stillYes, yesJob } from "./booking";
 import { addCodes, codeFor, decryptCode, encryptCode, pools, yesCode } from "./codes";
+import { fakeDb } from "./testdb";
 import { answerKnock, closeRest, listInbox, undoKnock } from "./inbox";
-
-const fakeDb = async () => {
-  const sqlite = new Database(":memory:");
-  for (const f of ["0001_init", "0003_handles", "0004_code_hash"]) sqlite.run(await Bun.file(`migrations/${f}.sql`).text());
-  const stmt = (sql: string, args: unknown[] = []) => ({
-    sql,
-    bind: (...a: unknown[]) => stmt(sql, a),
-    all: async () => ({ results: sqlite.query(sql).all(...(args as never[])) }),
-    first: async () => sqlite.query(sql).get(...(args as never[])),
-    run: async () => ({ meta: { changes: sqlite.query(sql).run(...(args as never[])).changes } }),
-  });
-  return {
-    sqlite,
-    db: {
-      prepare: (sql: string) => stmt(sql),
-      batch: async (list: { sql: string; run: () => Promise<unknown>; all: () => Promise<object> }[]) => {
-        const out = [];
-        for (const s of list) out.push(/^\s*SELECT/i.test(s.sql) ? { ...(await s.all()), meta: { changes: 0 } } : await s.run());
-        return out;
-      },
-    } as unknown as D1Database,
-  };
-};
 
 const seed = (s: Database, now: number) => {
   s.run(`INSERT INTO orgs VALUES ('o','o','free',1); INSERT INTO people (id,email,email_hash,created_at) VALUES ('p','p@x','h',1),('s1','a@x','h1',1),('s2','b@x','h2',1),('s3','c@x','h3',1);

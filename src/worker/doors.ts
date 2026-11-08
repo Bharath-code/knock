@@ -1,19 +1,20 @@
 import { PROFILE_SLUG, profileFields, slugify, type CreateDoor } from "../shared/door";
+import { SESSION_MS } from "./auth";
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 export const sha256 = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 export const randomHex = (bytes: number) => hex(crypto.getRandomValues(new Uint8Array(bytes)).buffer as ArrayBuffer);
 const newToken = () => randomHex(24);
 
-export type Owner = { handle: string; name: string };
+export type Owner = { handle: string | null; name: string };
 
 // ponytail: a cookie token is the only owner proof until magic-link sign-in (ACC-1) replaces it
-export const ownerFromToken = async (db: D1Database, token: string | undefined): Promise<Owner | null> => {
+export const ownerFromToken = async (db: D1Database, token: string | undefined, now = Date.now()): Promise<Owner | null> => {
   if (!token) return null;
   const row = await db
-    .prepare("SELECT handle, display_name FROM people WHERE owner_token_hash = ?1")
-    .bind(await sha256(token))
-    .first<{ handle: string; display_name: string | null }>();
+    .prepare("SELECT handle, display_name FROM people WHERE owner_token_hash = ?1 OR id IN (SELECT person_id FROM sessions WHERE token_hash = ?1 AND created_at > ?2)")
+    .bind(await sha256(token), now - SESSION_MS)
+    .first<{ handle: string | null; display_name: string | null }>();
   return row ? { handle: row.handle, name: row.display_name ?? "" } : null;
 };
 
@@ -21,14 +22,39 @@ export type Made = { ok: true; slug: string; handle: string; token?: string } | 
 
 export const createDoor = async (db: D1Database, input: CreateDoor, token: string | undefined): Promise<Made> => {
   const now = Date.now();
+  const hash = token ? await sha256(token) : null;
+  const mine = hash
+    ? await db
+        .prepare(
+          `SELECT p.id AS person_id, p.handle FROM people p JOIN users u ON u.person_id = p.id
+           WHERE p.owner_token_hash = ?1 OR p.id IN (SELECT person_id FROM sessions WHERE token_hash = ?1 AND created_at > ?2)`,
+        )
+        .bind(hash, now - SESSION_MS)
+        .first<{ person_id: string; handle: string | null }>()
+    : null;
+
+  // Signed in by email but no handle yet: this door's handle becomes theirs.
+  let claimed = false;
+  if (mine && !mine.handle) {
+    try {
+      await db
+        .prepare("UPDATE people SET handle = ?1, display_name = COALESCE(display_name, NULLIF(?2, '')) WHERE id = ?3 AND handle IS NULL")
+        .bind(input.handle, input.name, mine.person_id)
+        .run();
+      claimed = true;
+    } catch {
+      return { ok: false, error: "That handle is taken. Pick another." };
+    }
+  }
+
   const existing = await db
     .prepare(
-      "SELECT p.id AS person_id, p.owner_token_hash AS hash, u.id AS user_id, u.org_id FROM people p JOIN users u ON u.person_id = p.id WHERE p.handle = ?1",
+      "SELECT p.id AS person_id, u.id AS user_id, u.org_id FROM people p JOIN users u ON u.person_id = p.id WHERE p.handle = ?1",
     )
     .bind(input.handle)
-    .first<{ person_id: string; hash: string | null; user_id: string; org_id: string }>();
+    .first<{ person_id: string; user_id: string; org_id: string }>();
 
-  if (existing && (!token || existing.hash !== (await sha256(token)))) {
+  if (existing && existing.person_id !== mine?.person_id) {
     return { ok: false, error: "That handle is taken. Pick another." };
   }
 
@@ -63,6 +89,8 @@ export const createDoor = async (db: D1Database, input: CreateDoor, token: strin
         .bind(ids.user_id, ids.org_id, ids.person_id, now),
       door(PROFILE_SLUG, "profile", "profile", "", profileFields, 7),
     );
+  } else if (claimed) {
+    stmts.push(door(PROFILE_SLUG, "profile", "profile", "", profileFields, 7));
   }
 
   let slug = PROFILE_SLUG;
