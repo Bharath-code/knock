@@ -1,8 +1,9 @@
 /** @jsxImportSource hono/jsx */
 import type { Child } from "hono/jsx";
 import css from "../styles/theme.css?url";
-import { alert, button as btn, card, hint, input, label } from "../shared/ui";
+import { alert, button as btn, card, hint, input, label, notice } from "../shared/ui";
 import { RETAIN_DAYS } from "./retention";
+import { ownDoorPath, REF_LINE, STARTER, type Ref } from "../shared/growth";
 import { answerRate, defaultFields, replyLine, templates, WINDOWS, type Template } from "../shared/door";
 import type { DoorView, Owner } from "./doors";
 import { KnockFormView, StatusBody, type KnockForm } from "./knock-pages";
@@ -17,7 +18,7 @@ const Mark = () => (
   </svg>
 );
 
-export const Shell = ({ title, description, head, wide, copy, children }: { title: string; description: string; head?: Child; wide?: boolean; copy?: boolean; children: Child }) => (
+export const Shell = ({ title, description, head, wide, copy, poweredBy, children }: { title: string; description: string; head?: Child; wide?: boolean; copy?: boolean; poweredBy?: { from: Ref; t?: string }; children: Child }) => (
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
@@ -39,7 +40,17 @@ export const Shell = ({ title, description, head, wide, copy, children }: { titl
         </div>
       </header>
       <main class={`mx-auto w-full px-4 py-10 sm:px-6 sm:py-14 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
-      <footer class="mt-auto border-t border-line">
+      {poweredBy && (
+        <aside class="mt-auto border-t bg-muted/50">
+          <div class="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-6 sm:px-6">
+            <p class="text-sm">
+              <span class="font-medium">Powered by Doorbell.</span> <span class="text-muted-foreground">Get every request answered on your own posts.</span>
+            </p>
+            <a href={ownDoorPath(poweredBy.from, poweredBy.t)} class={btn({ variant: "outline" })}>Make your own door</a>
+          </div>
+        </aside>
+      )}
+      <footer class={`${poweredBy ? "" : "mt-auto "}border-t border-line`}>
         <p class="mx-auto flex max-w-5xl flex-wrap justify-between gap-2 px-4 py-6 text-sm text-muted-foreground sm:px-6">
           <span>Doorbell. Every knock gets an answer.</span>
           <a href="/privacy" class="text-muted-foreground hover:text-foreground">Privacy</a>
@@ -54,6 +65,8 @@ const button = btn({ variant: "default", size: "lg" });
 const field = `${input} mt-1.5`;
 
 export type NewState = {
+  ref?: Ref | null;
+  starter?: Template | null;
   owner: Owner | null;
   siteKey?: string;
   post?: string;
@@ -65,7 +78,8 @@ export type NewState = {
   error?: string;
 };
 
-export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "", template, fields, window = 7, error }: NewState) => {
+export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", template, fields, window = 7, error, ref, starter }: NewState) => {
+  post ??= starter ? STARTER[starter] : "";
   const step2 = template !== undefined;
   const widget = siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="new" />;
   const rows = [...(fields ?? defaultFields[template ?? "referral"]), "", "", ""].slice(0, 3);
@@ -80,8 +94,10 @@ export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "",
       <p class="mt-3 text-lg text-muted-foreground">
         {step2 ? "Edit what senders are asked, then create it." : "Paste the post you are about to share. Free, no sign-up."}
       </p>
+      {ref && !step2 && <p class={`mt-6 ${notice}`}>{REF_LINE[ref]}{starter ? " We started your post below. Replace the parts in [brackets]." : ""}</p>}
       {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
       <form method="post" action="/new" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
+        {ref && <input type="hidden" name="ref" value={ref} />}
         {!owner?.handle && (
           <div class="grid gap-6 sm:grid-cols-2">
             <div>
@@ -149,6 +165,7 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
     <Shell
       title={title}
       copy={made}
+      poweredBy={made ? undefined : { from: "door", t: door.template }}
       description={`${who} promises an answer within ${door.windowDays} days.`}
       head={
         <>
@@ -212,7 +229,7 @@ export const NotFoundDoor = () => (
 );
 
 export const StatusPage = ({ s, link, token }: { s: Status; link: string; token: string }) => (
-  <Shell title="Your knock | Doorbell" description="Status of your knock." head={<meta name="robots" content="noindex, nofollow" />}>
+  <Shell title="Your knock | Doorbell" description="Status of your knock." head={<meta name="robots" content="noindex, nofollow" />} poweredBy={{ from: "status" }}>
     <StatusBody s={s} link={link} />
     <details class="group mt-10 border-t pt-6">
       <summary class="cursor-pointer text-sm text-muted-foreground transition-colors hover:text-foreground">Delete my knock</summary>
