@@ -90,6 +90,14 @@ export const scoreSvg = (fit?: string) => {
   );
 };
 
+export const rewriteSvg = (before?: string, after?: string) => {
+  const b = int(before, 0, 5);
+  const a = int(after, 0, 5);
+  return frame(
+    `${text(110, 230, 34, "#5d6480", "My DM, before and after")}${text(110, 420, 150, "#b42318", `${b}/5`)}${text(520, 400, 90, "#5d6480", "→")}${text(700, 420, 150, "#0b7a57", `${a}/5`)}${text(110, 530, 30, "#0b7a57", "Checked on Doorbell")}`,
+  );
+};
+
 export const answeredSvg = (count?: string, minutes?: string) => {
   const n = int(count, 1, 999);
   const m = int(minutes, 0, 99_999);
@@ -106,4 +114,5 @@ const png = async (svg: string) => {
 
 export const ogPng = (d: DoorView) => png(ogSvg(d));
 export const scorePng = (fit?: string) => png(scoreSvg(fit));
+export const rewritePng = (b?: string, a?: string) => png(rewriteSvg(b, a));
 export const answeredPng = (count?: string, minutes?: string) => png(answeredSvg(count, minutes));
