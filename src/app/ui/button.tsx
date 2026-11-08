@@ -1,14 +1,31 @@
-import { Slot } from "radix-ui";
-import { Loader2 } from "lucide-react";
-import type { ComponentProps } from "react";
-import { button, type ButtonVariants } from "../../shared/ui";
-import { cn } from "./cn";
+import * as React from "react"
+import { type VariantProps } from "class-variance-authority"
+import { cn } from "cn"
+import { Slot } from "radix-ui"
 
-export const Button = ({ className, variant, size, asChild, busy, children, disabled, ...p }: ComponentProps<"button"> & ButtonVariants & { asChild?: boolean; busy?: boolean }) => {
-  const C = asChild ? Slot.Root : "button";
+import { buttonVariants } from "@/shared/ui"
+
+function Button({
+  className,
+  variant = "default",
+  size = "default",
+  asChild = false,
+  ...props
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }) {
+  const Comp = asChild ? Slot.Root : "button"
+
   return (
-    <C className={cn(button({ variant, size }), className)} disabled={disabled || busy} aria-busy={busy || undefined} {...p}>
-      {asChild ? children : <>{busy && <Loader2 className="animate-spin" aria-hidden />}{children}</>}
-    </C>
-  );
-};
+    <Comp
+      data-slot="button"
+      data-variant={variant}
+      data-size={size}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
+}
+
+export { Button, buttonVariants }

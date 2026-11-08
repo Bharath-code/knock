@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -9,7 +13,21 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["./worker-configuration.d.ts", "vite/client", "bun"]
+    "types": [
+      "./worker-configuration.d.ts",
+      "vite/client",
+      "bun"
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
-  "include": ["src", "scripts", "vite.config.ts", "worker-configuration.d.ts"]
+  "include": [
+    "src",
+    "scripts",
+    "vite.config.ts",
+    "worker-configuration.d.ts"
+  ]
 }

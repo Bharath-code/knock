@@ -32,7 +32,7 @@ const ScoreRing = ({ fit }: { fit: number }) => (
     </svg>
     <p class="absolute inset-0 grid place-content-center text-center font-display text-3xl font-semibold tabular">
       {fit}
-      <span class="block font-body text-xs font-medium text-muted">of 5</span>
+      <span class="block font-body text-xs font-medium text-muted-foreground">of 5</span>
     </p>
   </div>
 );
@@ -67,7 +67,7 @@ const Results = ({ rules, model }: Pick<PageState, "rules" | "model">) => (
       </div>
     )}
     {model === "unavailable" && (
-      <p class="mt-3 text-sm text-muted">Suggestions didn't load this time. The checks below still work.</p>
+      <p class="mt-3 text-sm text-muted-foreground">Suggestions didn't load this time. The checks below still work.</p>
     )}
     {rules && (
       <ul class="mt-6 divide-y divide-line border-t border-line text-sm">
@@ -88,11 +88,11 @@ const Results = ({ rules, model }: Pick<PageState, "rules" | "model">) => (
         <button
           type="button"
           data-copy="rewrite"
-          class={`mt-3 ${button({ variant: "primary" })}`}
+          class={`mt-3 ${button({ variant: "default" })}`}
         >
           Use improved version
         </button>
-        <p class="mt-2 text-sm text-muted">Copies it. Check the facts are yours before you send.</p>
+        <p class="mt-2 text-sm text-muted-foreground">Copies it. Check the facts are yours before you send.</p>
       </div>
     )}
   </section>
@@ -106,11 +106,11 @@ export const CheckerPage = ({ post = "", draft = "", siteKey, error, rules, mode
     head={siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
   >
     <h1 class="text-3xl">Will your DM get a reply?</h1>
-    <p class="mt-3 text-lg text-muted">Paste the post and your message. Free, no sign-up.</p>
+    <p class="mt-3 text-lg text-muted-foreground">Paste the post and your message. Free, no sign-up.</p>
     {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
     <form method="post" action="/check" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
       <div>
-        <label for="post" class={label}>The post you are replying to <span class="font-normal text-muted">(optional)</span></label>
+        <label for="post" class={label}>The post you are replying to <span class="font-normal text-muted-foreground">(optional)</span></label>
         <textarea id="post" name="post" rows={4} maxlength={10000} class={`${input} mt-1.5`}>{post}</textarea>
       </div>
       <div>
@@ -118,7 +118,7 @@ export const CheckerPage = ({ post = "", draft = "", siteKey, error, rules, mode
         <textarea id="draft" name="draft" rows={6} maxlength={10000} required class={`${input} mt-1.5`}>{draft}</textarea>
       </div>
       {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="check" />}
-      <button type="submit" class={`${button({ variant: "primary", size: "lg" })} w-full sm:w-auto`}>Check my DM</button>
+      <button type="submit" class={`${button({ variant: "default", size: "lg" })} w-full sm:w-auto`}>Check my DM</button>
     </form>
     {(rules || model) && <Results rules={rules} model={model} />}
   </Shell>

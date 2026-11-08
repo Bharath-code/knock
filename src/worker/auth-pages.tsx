@@ -4,7 +4,7 @@ import { Shell } from "./door-pages";
 import { alert, button as btn, card, input as inputBase, label, notice } from "../shared/ui";
 
 const input = `${inputBase} mt-1.5`;
-const button = `${btn({ variant: "primary", size: "lg" })} w-full sm:w-auto`;
+const button = `${btn({ variant: "default", size: "lg" })} w-full sm:w-auto`;
 
 export const SigninPage = ({ siteKey, sent, error, email = "" }: { siteKey?: string; sent?: boolean; error?: string; email?: string }) => (
   <Shell
@@ -24,7 +24,7 @@ export const SigninPage = ({ siteKey, sent, error, email = "" }: { siteKey?: str
       </p>
     ) : (
       <>
-        <p class="mt-3 text-lg text-muted">We email you a link. No password.</p>
+        <p class="mt-3 text-lg text-muted-foreground">We email you a link. No password.</p>
         {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
         <form method="post" action="/signin" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
           <div>
@@ -50,7 +50,7 @@ export const ConfirmPage = ({ token, error, link }: { token: string; error?: str
     {error || !link ? (
       <>
         <p role="alert" class={`mt-6 ${alert}`}>{error ?? "This link is not valid. Ask for a new one."}</p>
-        <a class={`mt-6 ${btn({ variant: "secondary" })}`} href="/signin">Get a new link</a>
+        <a class={`mt-6 ${btn({ variant: "outline" })}`} href="/signin">Get a new link</a>
       </>
     ) : (
       <>

@@ -19,7 +19,7 @@ if(i){i.hidden=false;i.addEventListener('click',function(){if(!m.value.trim())re
 export const KnockFormView = ({ door, siteKey, source, form = {} }: { door: DoorView; siteKey?: string; source: string; form?: KnockForm }) => (
   <section class={`mt-10 p-5 sm:p-8 ${card}`} aria-labelledby="knock-h">
     <h2 id="knock-h" class="text-2xl">Knock on this door</h2>
-    <p class="mt-1 text-muted">Short and specific gets a faster yes.</p>
+    <p class="mt-1 text-muted-foreground">Short and specific gets a faster yes.</p>
     {form.error && <p role="alert" class={`mt-5 ${alert}`}>{form.error}</p>}
     <form id="knock" method="post" action={`/d/${door.handle}/${door.slug === "profile" ? "profile" : door.slug}/knock?s=${source}`} data-post={door.post} data-sitekey={siteKey ?? ""} class="mt-6 space-y-6">
       {door.fields.map((q, i) => (
@@ -31,16 +31,16 @@ export const KnockFormView = ({ door, siteKey, source, form = {} }: { door: Door
       <div>
         <label for="message" class={label}>Your message</label>
         <textarea id="message" name="message" rows={5} required maxlength={2000} class={input}>{form.message ?? ""}</textarea>
-        <ul id="hints" aria-live="polite" class="mt-2 list-disc space-y-1 pl-5 text-sm text-muted empty:hidden" />
+        <ul id="hints" aria-live="polite" class="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground empty:hidden" />
         <div class="mt-2 flex flex-wrap items-center gap-2">
-          <button type="button" id="improve" hidden class={button({ variant: "secondary" })}>Use improved version</button>
+          <button type="button" id="improve" hidden class={button({ variant: "outline" })}>Use improved version</button>
           <button type="button" id="undo" hidden class={button({ variant: "ghost" })}>Undo</button>
         </div>
-        <p id="improve-note" aria-live="polite" class="mt-1 text-sm text-muted empty:hidden" />
+        <p id="improve-note" aria-live="polite" class="mt-1 text-sm text-muted-foreground empty:hidden" />
         <div id="improve-ts" />
       </div>
       <div>
-        <label for="proof" class={label}>Proof link <span class="font-normal text-muted">(optional)</span></label>
+        <label for="proof" class={label}>Proof link <span class="font-normal text-muted-foreground">(optional)</span></label>
         <input id="proof" name="proof" type="url" maxlength={300} value={form.proof ?? ""} placeholder="https://" class={input} />
       </div>
       <div>
@@ -48,12 +48,12 @@ export const KnockFormView = ({ door, siteKey, source, form = {} }: { door: Door
         <input id="email" name="email" type="email" required maxlength={254} autocomplete="email" value={form.email ?? ""} class={input} />
         <p class={hint}>No account needed. We email you one status link.</p>
       </div>
-      <label class="flex cursor-pointer items-start gap-3 text-sm text-muted">
+      <label class="flex cursor-pointer items-start gap-3 text-sm text-muted-foreground">
         <input type="checkbox" name="consent" required class="mt-0.5 size-5 shrink-0 cursor-pointer" />
         <span>I agree that {door.name || `@${door.handle}`} and Doorbell may store this message and email to deliver and answer it.</span>
       </label>
       {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="knock" />}
-      <button type="submit" class={`${button({ variant: "primary", size: "lg" })} w-full sm:w-auto`}>Send knock</button>
+      <button type="submit" class={`${button({ variant: "default", size: "lg" })} w-full sm:w-auto`}>Send knock</button>
     </form>
     {siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
     <script dangerouslySetInnerHTML={{ __html: script }} />
@@ -66,8 +66,8 @@ const Step = ({ done, label, at, hint }: { done: boolean; label: string; at?: nu
   <li class="flex gap-4 py-4">
     <span aria-hidden="true" class={`mt-1.5 size-3 shrink-0 rounded-full ${done ? "bg-yes ring-4 ring-yes-soft" : "border-2 border-line-strong"}`} />
     <span>
-      <strong class={`font-medium ${done ? "" : "text-muted"}`}>{label}</strong>
-      {done && at ? <time class="block font-mono text-xs text-muted" datetime={new Date(at).toISOString()}>{when(at)}</time> : <span class="block text-sm text-muted">{hint}</span>}
+      <strong class={`font-medium ${done ? "" : "text-muted-foreground"}`}>{label}</strong>
+      {done && at ? <time class="block font-mono text-xs text-muted-foreground" datetime={new Date(at).toISOString()}>{when(at)}</time> : <span class="block text-sm text-muted-foreground">{hint}</span>}
     </span>
   </li>
 );
@@ -75,7 +75,7 @@ const Step = ({ done, label, at, hint }: { done: boolean; label: string; at?: nu
 export const StatusBody = ({ s, link }: { s: Status; link: string }) => (
   <>
     <h1 class="text-3xl">Your knock</h1>
-    <p class="mt-3 text-lg text-muted">To {s.who}: {s.title}</p>
+    <p class="mt-3 text-lg text-muted-foreground">To {s.who}: {s.title}</p>
     <ol class={`mt-8 divide-y divide-line px-5 sm:px-6 ${card}`}>
       <Step done label="Delivered" at={s.createdAt} />
       <Step done={s.seenAt !== null} label="Seen" at={s.seenAt} hint="Not seen yet" />
@@ -86,6 +86,6 @@ export const StatusBody = ({ s, link }: { s: Status; link: string }) => (
         hint={`You will hear back by ${when(s.expiresAt)}`}
       />
     </ol>
-    <p class="mt-4 text-sm text-muted">Keep this link private: <span class="break-all font-mono">{link}</span></p>
+    <p class="mt-4 text-sm text-muted-foreground">Keep this link private: <span class="break-all font-mono">{link}</span></p>
   </>
 );

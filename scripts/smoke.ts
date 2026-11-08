@@ -25,7 +25,7 @@ assert("unknown path is a 404", (await fetch(`${base}/no-such-page`)).status ===
 
 const css = /<link rel="stylesheet" href="([^"]+)"/.exec(homeHtml)?.[1];
 const stylesheet = await fetch(`${base}${css}`, { headers: { accept: "text/css" } });
-assert("public stylesheet", stylesheet.ok && (await stylesheet.text()).includes("--brass"));
+assert("public stylesheet", stylesheet.ok && (await stylesheet.text()).includes("--brand-ink"));
 
 const health = await fetch(`${base}/api/health`);
 assert("api health", health.ok && ((await health.json()) as { status: string }).status === "ok");

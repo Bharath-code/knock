@@ -1,33 +1,38 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
-// One source of control styles for the React inbox (shadcn components) and the server-rendered hono pages.
-export const button = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap no-underline select-none transition-[background-color,border-color,color,box-shadow,transform] duration-(--d-fast) ease-out active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 aria-busy:cursor-progress [&_svg]:size-4 [&_svg]:shrink-0",
+// shadcn's buttonVariants, kept here so the server-rendered hono pages and the React inbox share one recipe.
+// Changes from stock: 44px tall on touch screens, pointer cursor, press scale, aria-busy cursor, destructive-outline.
+export const buttonVariants = cva(
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap no-underline transition-[background-color,border-color,color,box-shadow,transform] duration-(--d-fast) ease-out outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[.98] disabled:pointer-events-none disabled:opacity-50 aria-busy:cursor-progress aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        primary: "bg-brass text-on-accent shadow-e-1 hover:bg-brass-hover hover:text-on-accent",
-        secondary: "border border-line bg-card text-ink shadow-e-1 hover:border-line-strong hover:bg-sunk hover:text-ink",
-        ghost: "text-muted hover:bg-sunk hover:text-ink",
-        danger: "bg-no text-on-accent shadow-e-1 hover:opacity-90 hover:text-on-accent",
-        "danger-outline": "border border-line bg-card text-no hover:border-no hover:bg-no-soft hover:text-no",
+        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:text-primary-foreground",
+        destructive: "bg-destructive text-white shadow-xs hover:bg-destructive/90 hover:text-white dark:bg-destructive/70",
+        outline: "border border-input bg-card text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:text-secondary-foreground",
+        ghost: "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+        "destructive-outline": "border border-input bg-card text-destructive shadow-xs hover:border-destructive hover:bg-destructive/10 hover:text-destructive",
       },
       size: {
-        md: "h-11 px-4 text-sm sm:h-10",
-        lg: "h-12 px-5 text-base",
-        icon: "size-11",
+        default: "h-11 px-4 has-[>svg]:px-3 sm:h-9",
+        sm: "h-9 gap-1.5 px-3 has-[>svg]:px-2.5 sm:h-8",
+        lg: "h-12 px-6 text-base has-[>svg]:px-4 sm:h-11",
+        icon: "size-11 sm:size-9",
       },
     },
-    defaultVariants: { variant: "secondary", size: "md" },
+    defaultVariants: { variant: "default", size: "default" },
   },
 );
-export type ButtonVariants = VariantProps<typeof button>;
+export type ButtonVariants = VariantProps<typeof buttonVariants>;
+export const button = buttonVariants;
 
 export const input =
-  "block w-full rounded-md border border-line bg-card px-3 py-2.5 text-base text-ink shadow-e-1 transition-[border-color,box-shadow] duration-(--d-fast) ease-out placeholder:text-muted hover:border-line-strong focus-visible:border-brass focus-visible:ring-3 focus-visible:ring-brass/20 focus-visible:outline-none aria-invalid:border-no disabled:opacity-50";
+  "block w-full min-w-0 rounded-md border border-input bg-card px-3 py-2.5 text-base text-foreground shadow-xs transition-[color,border-color,box-shadow] duration-(--d-fast) outline-none placeholder:text-muted-foreground hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm dark:bg-input/30";
 
-export const label = "block text-sm font-medium text-ink";
-export const hint = "mt-1.5 text-sm text-muted";
-export const card = "rounded-lg border border-line bg-card shadow-e-1";
-export const alert = "rounded-md border border-no/40 bg-no-soft px-4 py-3 text-sm text-no";
-export const notice = "rounded-md border border-line bg-card px-4 py-3 text-sm";
+export const label = "block text-sm font-medium text-foreground";
+export const hint = "mt-1.5 text-sm text-muted-foreground";
+export const card = "rounded-xl border bg-card text-card-foreground shadow-xs";
+export const alert = "rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive";
+export const notice = "rounded-md border bg-card px-4 py-3 text-sm";

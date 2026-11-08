@@ -34,19 +34,19 @@ export const Shell = ({ title, description, head, wide, copy, children }: { titl
           </a>
           <a href="/check" class={`${btn({ variant: "ghost" })} max-sm:hidden`}>DM checker</a>
           <a href="/new" class={btn({ variant: "ghost" })}>Make a door</a>
-          <a href="/app" class={btn()}>Inbox</a>
+          <a href="/app" class={btn({ variant: "outline" })}>Inbox</a>
         </div>
       </header>
       <main class={`mx-auto w-full px-4 py-10 sm:px-6 sm:py-14 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
       <footer class="mt-auto border-t border-line">
-        <p class="mx-auto max-w-5xl px-4 py-6 text-sm text-muted sm:px-6">Doorbell. Every knock gets an answer.</p>
+        <p class="mx-auto max-w-5xl px-4 py-6 text-sm text-muted-foreground sm:px-6">Doorbell. Every knock gets an answer.</p>
       </footer>
       {copy && <script dangerouslySetInnerHTML={{ __html: copyScript }} />}
     </body>
   </html>
 );
 
-const button = btn({ variant: "primary", size: "lg" });
+const button = btn({ variant: "default", size: "lg" });
 const field = `${input} mt-1.5`;
 
 export type NewState = {
@@ -71,9 +71,9 @@ export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "",
       description="Paste your post. Get a door link that guarantees every sender an answer."
       head={siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
     >
-      <p class="text-sm text-muted tabular">Step {step2 ? 2 : 1} of 2</p>
+      <p class="text-sm text-muted-foreground tabular">Step {step2 ? 2 : 1} of 2</p>
       <h1 class="mt-2 text-3xl">{step2 ? "Check your door" : "Make a door"}</h1>
-      <p class="mt-3 text-lg text-muted">
+      <p class="mt-3 text-lg text-muted-foreground">
         {step2 ? "Edit what senders are asked, then create it." : "Paste the post you are about to share. Free, no sign-up."}
       </p>
       {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
@@ -85,12 +85,12 @@ export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "",
               <input id="handle" name="handle" value={handle} required minlength={3} maxlength={21} pattern="@?[A-Za-z0-9_]{3,20}" class={field} />
             </div>
             <div>
-              <label for="name" class={label}>Your name <span class="font-normal text-muted">(optional)</span></label>
+              <label for="name" class={label}>Your name <span class="font-normal text-muted-foreground">(optional)</span></label>
               <input id="name" name="name" value={name} maxlength={60} class={field} />
             </div>
           </div>
         )}
-        {owner && <p class="text-sm text-muted">Signed in on this device as <strong class="font-medium text-ink">@{owner.handle}</strong>.</p>}
+        {owner && <p class="text-sm text-muted-foreground">Signed in on this device as <strong class="font-medium text-ink">@{owner.handle}</strong>.</p>}
         <div>
           <label for="post" class={label}>Your post</label>
           <textarea id="post" name="post" rows={step2 ? 4 : 7} maxlength={10000} class={field}>{post}</textarea>
@@ -115,7 +115,7 @@ export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "",
             </div>
             <fieldset>
               <legend class={label}>What senders are asked</legend>
-              <p class="mt-0.5 text-sm text-muted">Up to 3. Clear one to drop it.</p>
+              <p class="mt-0.5 text-sm text-muted-foreground">Up to 3. Clear one to drop it.</p>
               <div class="mt-3 space-y-2">
                 {rows.map((f, i) => <input name="field" value={f} maxlength={60} aria-label={`Question ${i + 1}`} class={input} />)}
               </div>
@@ -164,7 +164,7 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
           <label for="reply" class={`mt-3 ${label}`}>Paste this in your post or bio</label>
           <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
             <input id="reply" readonly value={door.kind === "profile" ? url : replyLine(`${url}?s=reply`)} class={`${input} font-mono text-sm`} />
-            <button type="button" data-copy="reply" class={btn({ variant: "primary" })}>Copy</button>
+            <button type="button" data-copy="reply" class={btn({ variant: "default" })}>Copy</button>
           </div>
         </section>
       )}
@@ -174,7 +174,7 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
         </span>
         <p class="leading-tight">
           <span class="block font-medium">{who}</span>
-          <span class="text-sm text-muted">@{door.handle}</span>
+          <span class="text-sm text-muted-foreground">@{door.handle}</span>
         </p>
       </div>
       <h1 class="mt-6 text-3xl">{door.kind === "profile" ? "Ask me anything. You will get an answer." : "What I am looking for"}</h1>
@@ -188,7 +188,7 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
           </svg>
           <p>
             <span class="block font-medium">Every knock is answered within {door.windowDays} days.</span>
-            <span class="mt-0.5 block text-sm text-muted">
+            <span class="mt-0.5 block text-sm text-muted-foreground">
               {rate !== null ? <span class="tabular">{rate}% answered in time across {door.knocks} knocks.</span> : "Yes, not now, or no. Never silence."}
             </span>
           </p>
@@ -202,7 +202,7 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
 export const NotFoundDoor = () => (
   <Shell title="No such door | Doorbell" description="This door does not exist.">
     <h1 class="text-3xl">No such door</h1>
-    <p class="mt-3 text-lg text-muted">Check the link, or make your own.</p>
+    <p class="mt-3 text-lg text-muted-foreground">Check the link, or make your own.</p>
     <a href="/new" class={`mt-6 ${button}`}>Make a door</a>
   </Shell>
 );
