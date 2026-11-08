@@ -22,6 +22,7 @@ const app = await fetch(`${base}/app`);
 assert("react shell", app.ok && (await app.text()).includes('id="root"'));
 
 assert("unknown path is a 404", (await fetch(`${base}/no-such-page`)).status === 404);
+assert("metrics page is hidden without an admin session", (await fetch(`${base}/admin/metrics`)).status === 404);
 
 const css = /<link rel="stylesheet" href="([^"]+)"/.exec(homeHtml)?.[1];
 const stylesheet = await fetch(`${base}${css}`, { headers: { accept: "text/css" } });
