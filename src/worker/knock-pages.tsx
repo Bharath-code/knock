@@ -50,7 +50,7 @@ export const KnockFormView = ({ door, siteKey, source, form = {} }: { door: Door
       </div>
       <label class="flex cursor-pointer items-start gap-3 text-sm text-muted-foreground">
         <input type="checkbox" name="consent" required class="mt-0.5 size-5 shrink-0 cursor-pointer" />
-        <span>I agree that {door.name || `@${door.handle}`} and Doorbell may store this message and email to deliver and answer it.</span>
+        <span>I agree that {door.name || `@${door.handle}`} and Doorbell may store this message and email to deliver and answer it. <a href="/privacy">How we handle it</a>.</span>
       </label>
       {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="knock" />}
       <button type="submit" class={`${button({ variant: "default", size: "lg" })} w-full sm:w-auto`}>Send knock</button>

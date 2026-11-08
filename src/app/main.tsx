@@ -226,8 +226,9 @@ const App = () => {
           const have = new Set(cur.map((c) => c.id));
           const fresh = [...server.values()].filter((c) => !have.has(c.id) && !answered.current.has(c.id));
           // A knock arrives unscored and gets its fit a moment later, so refresh scores on cards already shown.
-          const rescored = cur.map((c) => { const s = server.get(c.id); return s && (s.fit !== c.fit || s.spam !== c.spam) ? { ...c, fit: s.fit, spam: s.spam } : c; });
-          if (!fresh.length && rescored.every((c, n) => c === cur[n])) continue;
+          // Cards the server no longer lists were answered elsewhere, expired or deleted by their sender.
+          const rescored = cur.filter((c) => server.has(c.id)).map((c) => { const s = server.get(c.id)!; return s.fit !== c.fit || s.spam !== c.spam ? { ...c, fit: s.fit, spam: s.spam } : c; });
+          if (!fresh.length && rescored.length === cur.length && rescored.every((c, n) => c === cur[n])) continue;
           const curId = cur[iRef.current]?.id;
           const merged = sortCards([...rescored, ...fresh]);
           const at = Math.max(0, merged.findIndex((c) => c.id === curId));

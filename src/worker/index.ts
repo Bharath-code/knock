@@ -8,7 +8,8 @@ import { createDoorSchema, defaultFields, pickTemplate, PROFILE_SLUG, handleSche
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
-import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
+import { DeletedPage, DoorPage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
+import { deleteByToken, purgeClosed } from "./retention";
 import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
@@ -404,6 +405,18 @@ const app = new Hono<AppEnv>()
     await c.env.JOBS.send({ type: "receipt", to: k.email, link, who: door.name || `@${door.handle}`, days: door.windowDays });
     return c.redirect(`/k/${result.token}`, 303);
   })
+  .post("/k/:token/delete", async (c) => {
+    const token = c.req.param("token");
+    c.header("cache-control", "private, no-store");
+    c.header("referrer-policy", "no-referrer");
+    // No sameOrigin check: the status page's no-referrer policy makes browsers send Origin: null, and the
+    // unguessable token in the path, not a cookie, is the credential, so a cross-site form can't forge it.
+    const gone = /^[0-9a-f]{32}$/.test(token) ? await deleteByToken(c.env.DB, token) : null;
+    if (!gone) return c.html(NotFoundDoor(), 404);
+    await c.env.DOOR.getByName(gone.doorId).announce();
+    return c.html(DeletedPage());
+  })
+  .get("/privacy", (c) => c.html(PrivacyPage()))
   .get("/k/:token", async (c) => {
     const token = c.req.param("token");
     c.header("x-robots-tag", "noindex, nofollow");
@@ -411,7 +424,7 @@ const app = new Hono<AppEnv>()
     c.header("referrer-policy", "no-referrer");
     const status = /^[0-9a-f]{32}$/.test(token) ? await getStatus(c.env.DB, token) : null;
     if (!status) return c.html(NotFoundDoor(), 404);
-    return c.html(StatusPage({ s: status, link: new URL(`/k/${token}`, c.req.url).href }));
+    return c.html(StatusPage({ s: status, link: new URL(`/k/${token}`, c.req.url).href, token }));
   })
   .get("/d/:handle/:slug?", async (c) => {
     const handle = c.req.param("handle");
@@ -494,6 +507,7 @@ export default {
     await pruneLimits(env.DB);
     await pruneAuth(env.DB);
     await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
+    await purgeClosed(env.DB);
     const digests = await digestJobs(env.DB);
     for (let i = 0; i < digests.length; i += 100) await env.JOBS.sendBatch(digests.slice(i, i + 100).map((body) => ({ body })));
   },
