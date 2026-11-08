@@ -19,7 +19,8 @@ Per task: build and test locally, then deploy to staging, run the staging smoke 
 - Apply pending migrations to live with `bun run db:live`, before deploying code.
 - Set live secrets: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `TURNSTILE_SECRET`, `SMOKE_TOKEN`, `CODES_KEY` (`openssl rand -base64 32`; encrypts invite codes, and rotating it strands every unassigned code).
 - Live `EMAIL_FROM` must be an address on a domain verified in Resend. Staging uses `onboarding@resend.dev`, which only delivers to the Resend account owner and `resend.dev` sinks, so real senders get no receipt or closure email until the domain is verified.
-- Spend limit on the live Anthropic key and a global daily budget on the model route (see the DEM-55 comment).
+- Spend limit on the live Anthropic key and a global daily budget on the model route (see the DEM-55 comment). Ranking also spends: one Haiku call per knock (`rank_model` log event, about $0.0001 each). Set `RANKER` to `rules` or `off` to stop it; with no `RANKER`, a key means Haiku.
+- After changing the rank prompt, run `bun --env-file=.dev.vars scripts/check-rank.ts`. Every injected fixture must keep its band.
 - Live Turnstile widget lists the live hostname.
 - `PUBLIC_ORIGIN` in `wrangler.jsonc` is the live URL. The cron uses it to build the daily digest's inbox and unsubscribe links, because cron runs have no request URL. Update it if the live domain changes. Staging has no cron, so the digest only runs on live.
 - `bun run deploy:live`, then smoke and Lighthouse against live.
