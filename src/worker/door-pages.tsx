@@ -18,7 +18,8 @@ const Mark = () => (
   </svg>
 );
 
-export const Shell = ({ title, description, head, wide, copy, poweredBy, children }: { title: string; description: string; head?: Child; wide?: boolean; copy?: boolean; poweredBy?: { from: Ref; t?: string }; children: Child }) => (
+const swapScript = `document.querySelectorAll('[data-use]').forEach(function(b){var t=document.getElementById(b.dataset.use),r=document.getElementById(b.dataset.from),old=null;b.hidden=false;b.addEventListener('click',function(){if(old===null){old=t.value;t.value=r.value;b.textContent='Undo';t.focus()}else{t.value=old;old=null;b.textContent='Use this version'}})})`;
+export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, children }: { title: string; description: string; head?: Child; wide?: boolean; copy?: boolean; swap?: boolean; poweredBy?: { from: Ref; t?: string }; children: Child }) => (
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
@@ -57,6 +58,7 @@ export const Shell = ({ title, description, head, wide, copy, poweredBy, childre
         </p>
       </footer>
       {copy && <script dangerouslySetInnerHTML={{ __html: copyScript }} />}
+      {swap && <script dangerouslySetInnerHTML={{ __html: swapScript }} />}
     </body>
   </html>
 );

@@ -24,7 +24,7 @@ import { addCodes, codeFor, pools, yesCode } from "./codes";
 import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking";
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
-import { answeredPng, ogPng, scorePng } from "./og";
+import { answeredPng, ogPng, rewritePng, scorePng } from "./og";
 import { createDoor, getDoor, ownerFromToken, sha256 } from "./doors";
 import { gate, ipKey, pruneLimits, withinLimit } from "./gate";
 import { d1Metrics, eventCounts, isAdmin, isBot, track, viewSource } from "./metrics";
@@ -397,6 +397,7 @@ const app = new Hono<AppEnv>()
     return c.redirect(made.slug === PROFILE_SLUG ? `/d/${made.handle}?made=1` : `/d/${made.handle}/${made.slug}?made=1`, 303);
   })
   .get("/og/score.png", async (c) => cardResponse(await scorePng(c.req.query("s"))))
+  .get("/og/rewrite.png", async (c) => cardResponse(await rewritePng(c.req.query("b"), c.req.query("a"))))
   .get("/og/answered.png", async (c) => cardResponse(await answeredPng(c.req.query("n"), c.req.query("m"))))
   .get("/d/:handle/:slug/og.png", async (c) => {
     const door = await getDoor(c.env.DB, c.req.param("handle"), c.req.param("slug"));

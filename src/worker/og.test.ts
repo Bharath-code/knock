@@ -22,3 +22,11 @@ test("answered card shows count and time, escapes input, carries no names", () =
   expect(answeredSvg("<b>", "x")).not.toContain("<b>");
   expect(answeredSvg("5000", "1")).toContain("999 people");
 });
+
+test("rewrite card shows only the two scores", async () => {
+  const { rewriteSvg } = await import("./og");
+  const s = rewriteSvg("2", "5");
+  expect(s).toContain(">2/5<");
+  expect(s).toContain(">5/5<");
+  expect(rewriteSvg("<x>", "9")).toContain(">0/5<");
+});

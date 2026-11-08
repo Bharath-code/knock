@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { check, LENGTH_LIMIT } from "./checker";
+import { check, diffWords, LENGTH_LIMIT, ruleScore } from "./checker";
 
 const AKASH_ORIGINAL = `Hi Akash,
 Iam intersted in the E5 backend role you posted.
@@ -156,5 +156,18 @@ describe("checker details", () => {
     const start = performance.now();
     check(hostile);
     expect(performance.now() - start).toBeLessThan(300);
+  });
+});
+
+describe("ruleScore and diffWords", () => {
+  test("same rules score both versions", () => {
+    expect(ruleScore(check(AKASH_ORIGINAL))).toBeLessThan(ruleScore(check(AKASH_REWRITE)));
+  });
+  test("diff marks removed and added words and reassembles both sides", () => {
+    const parts = diffWords("I am intersted in this", "I am interested in this");
+    expect(parts.filter((p) => p.kind === "del").map((p) => p.text)).toEqual(["intersted"]);
+    expect(parts.filter((p) => p.kind === "add").map((p) => p.text)).toEqual(["interested"]);
+    expect(parts.filter((p) => p.kind !== "add").map((p) => p.text).join("")).toBe("I am intersted in this");
+    expect(parts.filter((p) => p.kind !== "del").map((p) => p.text).join("")).toBe("I am interested in this");
   });
 });
