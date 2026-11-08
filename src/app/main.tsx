@@ -1,11 +1,11 @@
 import { cn } from "cn";
 import { hc } from "hono/client";
-import { DoorClosed, ExternalLink, Inbox as InboxIcon, Settings as SettingsIcon } from "lucide-react";
+import { CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, Settings as SettingsIcon } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { closureMessage } from "../shared/closure";
-import { CLOSE_MESSAGE, keyAction, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
+import { CLOSE_MESSAGE, keyAction, minutesTaken, MOMENT_MIN, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Pool } from "../shared/codes";
 import { card as cardBox } from "../shared/ui";
 import type { Api } from "../worker";
@@ -117,6 +117,8 @@ const App = () => {
   const [pools, setPools] = useState<Pool[]>([]);
   const [poolDoor, setPoolDoor] = useState("");
   const [codeText, setCodeText] = useState("");
+  const streak = useRef({ n: 0, t0: 0 });
+  const [moment, setMoment] = useState<{ n: number; m: number } | null>(null);
   const undo = useRef<{ card: InboxCard; index: number; t: ReturnType<typeof setTimeout> } | null>(null);
   const settings = path.startsWith("/app/settings");
 
@@ -269,7 +271,7 @@ const App = () => {
     undo.current = null;
     toast.dismiss("undo");
     const r = await api.inbox[":id"].undo.$post({ param: { id: u.card.id } }).catch(() => null);
-    if (r?.ok) { void loadPools(); answered.current.delete(u.card.id); setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
+    if (r?.ok) { void loadPools(); answered.current.delete(u.card.id); streak.current.n = Math.max(0, streak.current.n - 1); setMoment(null); setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
     else fail("Too late to undo.");
   }, [loadPools]);
 
@@ -277,6 +279,7 @@ const App = () => {
     const card = cards?.[i];
     if (!card) return;
     const extra = { reason, note: note.trim() || undefined };
+    const started = Date.now();
     setReason(undefined);
     setNote("");
     answered.current.add(card.id);
@@ -287,6 +290,13 @@ const App = () => {
       const { code } = (await r.json()) as { code?: string };
       if (code === "empty") toast.warning("That door is out of invite codes. The sender gets your booking link instead.", { duration: 10_000, action: { label: "Add codes", onClick: () => navigate("/app/settings") } });
       if (a === "yes") void loadPools();
+      const st = streak.current;
+      st.t0 ||= started;
+      st.n += 1;
+      if ((cards?.length ?? 1) <= 1) {
+        if (st.n >= MOMENT_MIN) setMoment({ n: st.n, m: minutesTaken(Date.now() - st.t0) });
+        else streak.current = { n: 0, t0: 0 };
+      }
       if (undo.current) clearTimeout(undo.current.t);
       undo.current = { card, index: i, t: setTimeout(() => { undo.current = null; }, UNDO_MS) };
       toast(`Answered ${LABEL[a]}`, { id: "undo", duration: UNDO_MS, action: { label: "Undo", onClick: () => void undoLast() } });
@@ -304,6 +314,7 @@ const App = () => {
     if (!r?.ok) return fail("Couldn't close your knocks. Nothing was changed.");
     const { closed } = await r.json();
     setCards([]);
+    streak.current = { n: 0, t0: 0 };
     undo.current = null;
     toast.success(`Closed ${closed} ${closed === 1 ? "knock" : "knocks"}. Each sender was emailed.`);
   });
@@ -324,6 +335,9 @@ const App = () => {
 
   const card = cards?.[i];
   const open = cards?.length ?? 0;
+  useEffect(() => {
+    if (card && moment) { setMoment(null); streak.current = { n: 0, t0: 0 }; }
+  }, [card, moment]);
   const tab = "inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground no-underline transition-colors duration-(--d-fast) hover:bg-accent hover:text-foreground aria-[current=page]:bg-accent aria-[current=page]:text-foreground sm:h-9";
 
   const inbox = gate ? (
@@ -340,6 +354,17 @@ const App = () => {
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[20rem_1fr] lg:py-10" aria-busy="true">
       <div className="hidden space-y-2 lg:block">{[0, 1, 2].map((n) => <Skeleton key={n} className="h-16" />)}</div>
       <Skeleton className="h-64 rounded-xl" />
+    </div>
+  ) : !card && moment ? (
+    <div className="mx-auto max-w-md px-4 py-20 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95" role="status">
+      <CheckCheck className="mx-auto size-10 text-yes" aria-hidden />
+      <h1 className="mt-4 text-3xl">All answered</h1>
+      <p className="mt-3 text-xl font-semibold">You gave <span className="tabular">{moment.n}</span> people closure.</p>
+      <p className="mt-1 text-muted-foreground">It took <span className="tabular">{moment.m}</span> {moment.m === 1 ? "minute" : "minutes"}.</p>
+      <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+        <Button onClick={() => { setMoment(null); streak.current = { n: 0, t0: 0 }; }}>Back to inbox</Button>
+        <Button asChild variant="outline"><a href={`/og/answered.png?n=${moment.n}&m=${moment.m}`} download="doorbell-answered.png">Download share image</a></Button>
+      </div>
     </div>
   ) : !card ? (
     <div className="mx-auto max-w-md px-4 py-20 text-center">
