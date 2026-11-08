@@ -306,7 +306,7 @@ const App = () => {
   useEffect(() => {
     if (settings) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element | null)?.closest?.("input, textarea, select, [role=dialog]")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element | null)?.closest?.("input, textarea, select, [role=dialog], [role=alertdialog]")) return;
       const k = keyAction(e.key);
       if (!k) return;
       if (k.type === "move") setI((n) => Math.max(0, Math.min(n + k.by, (cards?.length ?? 1) - 1)));

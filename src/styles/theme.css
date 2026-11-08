@@ -125,9 +125,9 @@
 :root {
   --line-strong: color-mix(in oklab, var(--line) 60%, var(--muted));
   --brass-hover: color-mix(in oklab, var(--brass) 86%, var(--ink));
-  --no-soft: color-mix(in oklab, var(--no) 12%, var(--card));
-  --yes-soft: color-mix(in oklab, var(--yes) 12%, var(--card));
-  --later-soft: color-mix(in oklab, var(--later) 12%, var(--card));
+  --no-soft: color-mix(in oklab, var(--no) 9%, var(--card));
+  --yes-soft: color-mix(in oklab, var(--yes) 9%, var(--card));
+  --later-soft: color-mix(in oklab, var(--later) 9%, var(--card));
 }
 
 @layer base {
