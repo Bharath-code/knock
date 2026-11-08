@@ -1,8 +1,10 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { keyAction, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
+import { keyAction, NOTE_MAX, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
 import { bookingUrl } from "../shared/booking";
+import { closureMessage } from "../shared/closure";
 import { parseCodes } from "../shared/codes";
+import { closeJob, knockTemplate, stillAnswered } from "./closure";
 import { getBooking, setBooking, stillYes, yesJob } from "./booking";
 import { addCodes, codeFor, decryptCode, encryptCode, pools, yesCode } from "./codes";
 import { answerKnock, closeRest, listInbox, undoKnock } from "./inbox";
@@ -177,4 +179,33 @@ test("undo releases the code, and a repeat Yes takes it again; a taken code stay
   expect((await pools(db, owner))[0]!.free).toBe(0);
   sqlite.run("DELETE FROM knocks WHERE id = 'low'");
   expect((await pools(db, owner))[0]!.free).toBe(0);
+});
+
+test("every template has a kind default for No and Not now, and unknown templates fall back", () => {
+  for (const t of ["referral", "beta", "gig", "profile"]) {
+    for (const a of ["no", "later"] as const) {
+      const m = closureMessage(t, a);
+      expect(m.length).toBeGreaterThan(40);
+      expect(m.length).toBeLessThanOrEqual(NOTE_MAX);
+      expect(m).not.toMatch(/https?:|www\./);
+    }
+    expect(closureMessage(t, "no")).not.toBe(closureMessage(t, "later"));
+  }
+  expect(closureMessage("mystery", "no")).toBe(closureMessage("profile", "no"));
+});
+
+test("a closure job carries the stored message and is skipped after undo; only the owner sees the template", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  expect(await knockTemplate(db, owner, "high")).toBe("profile");
+  expect(await knockTemplate(db, { userId: "other", orgId: "o" }, "high")).toBeNull();
+  await answerKnock(db, owner, "high", { answer: "no", note: closureMessage("profile", "no") }, now);
+  await answerKnock(db, owner, "low", { answer: "later", note: "Custom words" }, now);
+  expect(await closeJob(db, owner, "high", now)).toMatchObject({ to: "c@x", later: false, message: closureMessage("profile", "no") });
+  expect(await closeJob(db, owner, "low", now)).toMatchObject({ to: "a@x", later: true, message: "Custom words" });
+  expect(await closeJob(db, owner, "none", now)).toBeNull();
+  expect(await stillAnswered(db, "high", now)).toBe(true);
+  await undoKnock(db, owner, "high", now + 1_000);
+  expect(await stillAnswered(db, "high", now)).toBe(false);
 });

@@ -16,6 +16,7 @@ export type Reply = { answer: InboxAnswer; reason?: Reason; note?: string };
 export type InboxCard = {
   id: string;
   door: string;
+  template: string;
   message: string;
   answers: { q: string; a: string }[];
   proof: string | null;

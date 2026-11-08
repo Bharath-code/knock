@@ -13,7 +13,7 @@ export const ownerUser = async (db: D1Database, token: string | undefined): Prom
 };
 
 type Row = {
-  id: string; slug: string; kind: string; answers_json: string; proof_url: string | null; fit: number | null;
+  id: string; slug: string; kind: string; template: string; answers_json: string; proof_url: string | null; fit: number | null;
   spam: number; used_rewrite: number; created_at: number; expires_at: number;
 };
 
@@ -21,7 +21,7 @@ type Row = {
 export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()): Promise<InboxCard[]> => {
   const { results } = await db
     .prepare(
-      `SELECT k.id, d.slug, d.kind, k.answers_json, k.proof_url, k.fit, k.spam, k.used_rewrite, k.created_at, k.expires_at
+      `SELECT k.id, d.slug, d.kind, d.template, k.answers_json, k.proof_url, k.fit, k.spam, k.used_rewrite, k.created_at, k.expires_at
        FROM knocks k JOIN doors d ON d.id = k.door_id
        WHERE d.owner_user_id = ?1 AND k.status IN ('new', 'seen') AND k.expires_at > ?2
        ORDER BY k.fit IS NULL, k.fit DESC, k.created_at ASC`,
@@ -31,7 +31,7 @@ export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()):
   return results.map((r) => {
     const body = JSON.parse(r.answers_json) as { message?: string; answers?: { q: string; a: string }[] };
     return {
-      id: r.id, door: r.kind === "profile" ? "Your door" : r.slug, message: body.message ?? "", answers: body.answers ?? [],
+      id: r.id, door: r.kind === "profile" ? "Your door" : r.slug, template: r.template, message: body.message ?? "", answers: body.answers ?? [],
       proof: r.proof_url, fit: r.fit, spam: r.spam === 1, rewrote: r.used_rewrite === 1, createdAt: r.created_at, expiresAt: r.expires_at,
     };
   });
