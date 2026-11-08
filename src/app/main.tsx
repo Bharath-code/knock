@@ -362,7 +362,7 @@ const App = () => {
       <p className="mt-3 text-xl font-semibold">You gave <span className="tabular">{moment.n}</span> people closure.</p>
       <p className="mt-1 text-muted-foreground">It took <span className="tabular">{moment.m}</span> {moment.m === 1 ? "minute" : "minutes"}.</p>
       <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-        <Button onClick={() => { setMoment(null); streak.current = { n: 0, t0: 0 }; }}>Back to your doors</Button>
+        <Button onClick={() => { setMoment(null); streak.current = { n: 0, t0: 0 }; }}>Back to inbox</Button>
         <Button asChild variant="outline"><a href={`/og/answered.png?n=${moment.n}&m=${moment.m}`} download="doorbell-answered.png">Download share image</a></Button>
       </div>
     </div>
