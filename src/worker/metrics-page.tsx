@@ -42,6 +42,19 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
         <p class="mt-1 text-sm text-muted-foreground">Yes, Not now or No within the window. Auto-closed knocks don't count.</p>
       </section>
 
+      <section class={`mt-10 p-5 ${card}`} aria-labelledby="fd">
+        <div class="flex items-start justify-between gap-3">
+          <h2 id="fd" class="text-sm font-medium text-muted-foreground">First door speed · last 5 new receivers</h2>
+          <span class={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE[d1.firstDoor.n < 5 ? "none" : d1.firstDoor.fast >= 4 ? "met" : "below"].cls}`}>
+            {BADGE[d1.firstDoor.n < 5 ? "none" : d1.firstDoor.fast >= 4 ? "met" : "below"].text}
+          </span>
+        </div>
+        <p class="mt-2 font-display text-2xl font-semibold tabular-nums">{d1.firstDoor.n ? `${d1.firstDoor.fast} of ${d1.firstDoor.n} under 60 s` : "–"}</p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {d1.firstDoor.median !== null ? `Median ${Math.round(d1.firstDoor.median)} s. ` : ""}Timed from opening /new to creating the first door. Goal: 4 of 5. Needs 5 new receivers; older doors aren't timed.
+        </p>
+      </section>
+
       <section class="mt-10" aria-labelledby="targets">
         <h2 id="targets" class="text-xl">Day-14 targets</h2>
         <ul class="mt-4 grid gap-4 sm:grid-cols-2">

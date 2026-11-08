@@ -20,7 +20,7 @@ export const ownerFromToken = async (db: D1Database, token: string | undefined, 
 
 export type Made = { ok: true; slug: string; handle: string; token?: string } | { ok: false; error: string };
 
-export const createDoor = async (db: D1Database, input: CreateDoor, token: string | undefined): Promise<Made> => {
+export const createDoor = async (db: D1Database, input: CreateDoor, token: string | undefined, startedAt?: number): Promise<Made> => {
   const now = Date.now();
   const hash = token ? await sha256(token) : null;
   const mine = hash
@@ -113,6 +113,13 @@ export const createDoor = async (db: D1Database, input: CreateDoor, token: strin
     await db.batch(stmts);
   } catch {
     return { ok: false, error: "That handle was just taken, or two doors collided. Try again." };
+  }
+  // The profile door is only inserted when the owner had no door yet, so this runs once per receiver.
+  if ((!existing || claimed) && startedAt !== undefined) {
+    const secs = Math.round((now - startedAt) / 1000);
+    if (secs >= 0 && secs <= 3600) {
+      await db.prepare("UPDATE doors SET first_door_secs = ?1 WHERE owner_user_id = ?2 AND slug = ?3 AND first_door_secs IS NULL").bind(secs, ids.user_id, PROFILE_SLUG).run();
+    }
   }
   return { ok: true, slug, handle: input.handle, token: fresh };
 };
