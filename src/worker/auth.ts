@@ -3,6 +3,26 @@ import { randomHex, sha256 } from "./doors";
 
 export const LINK_MS = 15 * 60_000;
 export const SESSION_MS = 30 * 86_400_000;
+export const IDLE_MS = 7 * 86_400_000;
+const TOUCH_MS = 3_600_000;
+
+// One definition of a live session: inside the 30-day cap and active in the last 7 days.
+export const SESSION_SQL = "SELECT person_id FROM sessions WHERE token_hash = ?1 AND created_at > ?2 AND COALESCE(last_seen_at, created_at) > ?3";
+export const sessionBinds = (hash: string, now: number) => [hash, now - SESSION_MS, now - IDLE_MS] as const;
+
+// Rolling idle timeout: refresh last_seen_at at most once an hour per session.
+export const touchSession = (db: D1Database, hash: string, now = Date.now()) =>
+  db
+    .prepare("UPDATE sessions SET last_seen_at = ?2 WHERE token_hash = ?1 AND COALESCE(last_seen_at, created_at) < ?3")
+    .bind(hash, now, now - TOUCH_MS)
+    .run();
+
+export const deviceLabel = (ua: string | undefined) => {
+  const u = ua ?? "";
+  const browser = /Edg\//.test(u) ? "Edge" : /Firefox\//.test(u) ? "Firefox" : /Chrome\//.test(u) ? "Chrome" : /Safari\//.test(u) ? "Safari" : "Browser";
+  const os = /iPhone|iPad/.test(u) ? "iOS" : /Android/.test(u) ? "Android" : /Mac OS X/.test(u) ? "Mac" : /Windows/.test(u) ? "Windows" : /Linux/.test(u) ? "Linux" : "unknown device";
+  return `${browser} on ${os}`;
+};
 export const PLACEHOLDER = "@anon.doorbell.invalid";
 
 // A link is for sign-in (personId null) or for attaching an email to an anonymous owner.
@@ -18,7 +38,7 @@ export const requestLink = async (db: D1Database, email: string, personId: strin
 };
 
 type Link = { email: string; email_hash: string; person_id: string | null };
-export type Confirmed = { ok: true; token: string } | { ok: false; error: string };
+export type Confirmed = { ok: true; token: string; alert: string | null } | { ok: false; error: string };
 
 const attach = async (db: D1Database, link: Link & { person_id: string }): Promise<string | null> => {
   const p = await db.prepare("SELECT email, email_hash FROM people WHERE id = ?1").bind(link.person_id).first<{ email: string; email_hash: string }>();
@@ -67,7 +87,7 @@ const ensureUser = async (db: D1Database, personId: string, email: string, now: 
 };
 
 // One statement consumes the link, so two confirms can never both win. Always mints a fresh session.
-export const confirmLink = async (db: D1Database, token: string, now = Date.now()): Promise<Confirmed> => {
+export const confirmLink = async (db: D1Database, token: string, now = Date.now(), device: string | null = null): Promise<Confirmed> => {
   const link = await db
     .prepare("UPDATE magic_links SET used_at = ?2 WHERE token_hash = ?1 AND used_at IS NULL AND expires_at > ?2 RETURNING email, email_hash, person_id")
     .bind(await sha256(token), now)
@@ -84,15 +104,40 @@ export const confirmLink = async (db: D1Database, token: string, now = Date.now(
     personId = found;
     await ensureUser(db, personId, link.email, now);
   }
+  // A sign-in while another device is signed in sends the account an alert.
+  const others = await db
+    .prepare("SELECT COUNT(*) AS n FROM sessions WHERE person_id = ?1 AND created_at > ?2 AND COALESCE(last_seen_at, created_at) > ?3")
+    .bind(personId, now - SESSION_MS, now - IDLE_MS)
+    .first<{ n: number }>();
   const session = randomHex(32);
-  await db.prepare("INSERT INTO sessions (token_hash, person_id, created_at) VALUES (?1, ?2, ?3)").bind(await sha256(session), personId, now).run();
-  return { ok: true, token: session };
+  await db.batch([
+    db.prepare("INSERT INTO sessions (token_hash, person_id, created_at, last_seen_at, device) VALUES (?1, ?2, ?3, ?3, ?4)").bind(await sha256(session), personId, now, device),
+    db
+      .prepare("INSERT INTO audit_log (id, org_id, actor, action, target, at) SELECT ?1, org_id, ?2, 'auth.sign_in', ?3, ?4 FROM users WHERE person_id = ?2")
+      .bind(crypto.randomUUID(), personId, device, now),
+  ]);
+  return { ok: true, token: session, alert: others?.n && !link.person_id ? link.email : null };
+};
+
+export const signOut = async (db: D1Database, token: string) =>
+  (await db.prepare("DELETE FROM sessions WHERE token_hash = ?1").bind(await sha256(token)).run()).meta.changes === 1;
+
+// Needs a real email, since it also retires the legacy owner cookie and the email is the way back in.
+export const signOutEverywhere = async (db: D1Database, userId: string, orgId: string, now = Date.now()) => {
+  const p = await personOfUser(db, userId);
+  if (!p || p.email.endsWith(PLACEHOLDER)) return false;
+  await db.batch([
+    db.prepare("DELETE FROM sessions WHERE person_id = ?1").bind(p.id),
+    db.prepare("UPDATE people SET owner_token_hash = NULL WHERE id = ?1").bind(p.id),
+    db.prepare("INSERT INTO audit_log (id, org_id, actor, action, target, at) VALUES (?1, ?2, ?3, 'auth.sign_out_all', NULL, ?4)").bind(crypto.randomUUID(), orgId, p.id, now),
+  ]);
+  return true;
 };
 
 export const pruneAuth = (db: D1Database, now = Date.now()) =>
   db.batch([
     db.prepare("DELETE FROM magic_links WHERE expires_at < ?1").bind(now - 86_400_000),
-    db.prepare("DELETE FROM sessions WHERE created_at < ?1").bind(now - SESSION_MS),
+    db.prepare("DELETE FROM sessions WHERE created_at < ?1 OR COALESCE(last_seen_at, created_at) < ?2").bind(now - SESSION_MS, now - IDLE_MS),
   ]);
 
 export const personOfUser = async (db: D1Database, userId: string) =>

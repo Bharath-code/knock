@@ -1,5 +1,5 @@
 import { PROFILE_SLUG, profileFields, slugify, type CreateDoor } from "../shared/door";
-import { SESSION_MS } from "./auth";
+import { SESSION_SQL, sessionBinds } from "./auth";
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 export const sha256 = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
@@ -12,8 +12,8 @@ export type Owner = { handle: string | null; name: string };
 export const ownerFromToken = async (db: D1Database, token: string | undefined, now = Date.now()): Promise<Owner | null> => {
   if (!token) return null;
   const row = await db
-    .prepare("SELECT handle, display_name FROM people WHERE owner_token_hash = ?1 OR id IN (SELECT person_id FROM sessions WHERE token_hash = ?1 AND created_at > ?2)")
-    .bind(await sha256(token), now - SESSION_MS)
+    .prepare(`SELECT handle, display_name FROM people WHERE owner_token_hash = ?1 OR id IN (${SESSION_SQL})`)
+    .bind(...sessionBinds(await sha256(token), now))
     .first<{ handle: string | null; display_name: string | null }>();
   return row ? { handle: row.handle, name: row.display_name ?? "" } : null;
 };
@@ -27,9 +27,9 @@ export const createDoor = async (db: D1Database, input: CreateDoor, token: strin
     ? await db
         .prepare(
           `SELECT p.id AS person_id, p.handle FROM people p JOIN users u ON u.person_id = p.id
-           WHERE p.owner_token_hash = ?1 OR p.id IN (SELECT person_id FROM sessions WHERE token_hash = ?1 AND created_at > ?2)`,
+           WHERE p.owner_token_hash = ?1 OR p.id IN (${SESSION_SQL})`,
         )
-        .bind(hash, now - SESSION_MS)
+        .bind(...sessionBinds(hash, now))
         .first<{ person_id: string; handle: string | null }>()
     : null;
 
