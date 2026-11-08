@@ -1,5 +1,6 @@
 /** @jsxImportSource hono/jsx */
-import css from "../styles/theme.css?url";
+import { alert, button, card, input, label } from "../shared/ui";
+import { Shell } from "./door-pages";
 import type { CheckResult } from "../shared/checker";
 import type { ModelCheck } from "./model";
 
@@ -29,9 +30,9 @@ const ScoreRing = ({ fit }: { fit: number }) => (
         stroke-dasharray={`${(RING * fit) / 5} ${RING}`}
       />
     </svg>
-    <p class="absolute inset-0 grid place-content-center text-center font-display text-3xl font-extrabold">
+    <p class="absolute inset-0 grid place-content-center text-center font-display text-3xl font-semibold tabular">
       {fit}
-      <span class="block font-body text-xs font-medium text-muted">of 5</span>
+      <span class="block font-body text-xs font-medium text-muted-foreground">of 5</span>
     </p>
   </div>
 );
@@ -50,15 +51,15 @@ const rows = (r: CheckResult) =>
   ] as const;
 
 const Results = ({ rules, model }: Pick<PageState, "rules" | "model">) => (
-  <section class="mt-8 rounded-lg border border-line bg-card p-5 shadow-e-1" aria-labelledby="results">
-    <h2 id="results" class="text-2xl font-extrabold">Your result</h2>
+  <section class={`mt-10 p-5 sm:p-8 ${card}`} aria-labelledby="results">
+    <h2 id="results" class="text-2xl">Your result</h2>
     {model && model !== "unavailable" && (
       <div class="mt-4 flex items-center gap-5">
         <ScoreRing fit={model.fit} />
         <div>
           <p class="font-medium">How well your draft fits the post</p>
           {model.tips.length > 0 && (
-            <ul class="mt-2 list-disc space-y-1 pl-5 text-[15px]">
+            <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
               {model.tips.map((t) => <li>{t}</li>)}
             </ul>
           )}
@@ -66,13 +67,13 @@ const Results = ({ rules, model }: Pick<PageState, "rules" | "model">) => (
       </div>
     )}
     {model === "unavailable" && (
-      <p class="mt-3 text-[15px] text-muted">Suggestions didn't load this time. The checks below still work.</p>
+      <p class="mt-3 text-sm text-muted-foreground">Suggestions didn't load this time. The checks below still work.</p>
     )}
     {rules && (
-      <ul class="mt-5 divide-y divide-line text-[15px]">
+      <ul class="mt-6 divide-y divide-line border-t border-line text-sm">
         {rows(rules).map(([name, ok, text]) => (
-          <li class="flex gap-3 py-2">
-            <span class={`w-14 shrink-0 font-mono text-xs uppercase ${ok ? "text-yes" : "text-no"}`}>{ok ? "Pass" : "Fix"}</span>
+          <li class="flex items-start gap-3 py-3">
+            <span class={`inline-flex w-12 shrink-0 justify-center rounded-full py-0.5 text-xs font-medium ${ok ? "bg-yes-soft text-yes" : "bg-no-soft text-no"}`}>{ok ? "Pass" : "Fix"}</span>
             <span><strong class="font-medium">{name}.</strong> {text}</span>
           </li>
         ))}
@@ -80,61 +81,45 @@ const Results = ({ rules, model }: Pick<PageState, "rules" | "model">) => (
     )}
     {model && model !== "unavailable" && model.rewrite && (
       <div class="mt-6">
-        <label for="rewrite" class="font-medium">Improved version</label>
-        <textarea id="rewrite" readonly rows={6} class="mt-2 w-full rounded-md border border-line bg-sunk p-3 text-[15px]">
+        <label for="rewrite" class={label}>Improved version</label>
+        <textarea id="rewrite" readonly rows={6} class={`${input} mt-1.5 bg-sunk`}>
           {model.rewrite}
         </textarea>
         <button
           type="button"
           data-copy="rewrite"
-          class="mt-2 min-h-11 rounded-pill bg-brass px-5 font-medium text-on-accent"
+          class={`mt-3 ${button({ variant: "default" })}`}
         >
           Use improved version
         </button>
-        <p class="mt-1 text-[13px] text-muted">Copies it. Check the facts are yours before you send.</p>
+        <p class="mt-2 text-sm text-muted-foreground">Copies it. Check the facts are yours before you send.</p>
       </div>
     )}
   </section>
 );
 
-const copyScript = `document.querySelectorAll('[data-copy]').forEach(function(b){b.addEventListener('click',function(){var t=document.getElementById(b.dataset.copy);navigator.clipboard.writeText(t.value).then(function(){b.textContent='Copied'});t.select()})})`;
-
 export const CheckerPage = ({ post = "", draft = "", siteKey, error, rules, model }: PageState) => (
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>Free DM checker | Doorbell</title>
-      <meta name="description" content="Paste the post and your DM. Get a fit score, plain tips and a tighter version in seconds." />
-      <link rel="stylesheet" href={css} />
-      {siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
-    </head>
-    <body class="bg-paper text-ink">
-      <main class="mx-auto max-w-[65ch] px-5 py-10">
-        <p class="font-mono text-xs tracking-[.12em] text-brass uppercase">Doorbell</p>
-        <h1 class="mt-3 text-[34px] font-extrabold sm:text-[44px]">Will your DM get a reply?</h1>
-        <p class="mt-3 text-muted">Paste the post and your message. Free, no sign-up.</p>
-
-        {error && <p role="alert" class="mt-5 rounded-md border border-no p-3 text-[15px] text-no">{error}</p>}
-
-        <form method="post" action="/check" class="mt-6 space-y-4">
-          <div>
-            <label for="post" class="font-medium">The post you are replying to <span class="text-muted">(optional)</span></label>
-            <textarea id="post" name="post" rows={4} maxlength={10000} class="mt-1 w-full rounded-md border border-line bg-card p-3">{post}</textarea>
-          </div>
-          <div>
-            <label for="draft" class="font-medium">Your DM</label>
-            <textarea id="draft" name="draft" rows={6} maxlength={10000} required class="mt-1 w-full rounded-md border border-line bg-card p-3">{draft}</textarea>
-          </div>
-          {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="check" />}
-          <button type="submit" class="min-h-11 w-full rounded-pill bg-brass px-6 font-medium text-on-accent sm:w-auto">
-            Check my DM
-          </button>
-        </form>
-
-        {(rules || model) && <Results rules={rules} model={model} />}
-      </main>
-      <script dangerouslySetInnerHTML={{ __html: copyScript }} />
-    </body>
-  </html>
+  <Shell
+    title="Free DM checker | Doorbell"
+    copy={!!(model && model !== "unavailable" && model.rewrite)}
+    description="Paste the post and your DM. Get a fit score, plain tips and a tighter version in seconds."
+    head={siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
+  >
+    <h1 class="text-3xl">Will your DM get a reply?</h1>
+    <p class="mt-3 text-lg text-muted-foreground">Paste the post and your message. Free, no sign-up.</p>
+    {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
+    <form method="post" action="/check" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
+      <div>
+        <label for="post" class={label}>The post you are replying to <span class="font-normal text-muted-foreground">(optional)</span></label>
+        <textarea id="post" name="post" rows={4} maxlength={10000} class={`${input} mt-1.5`}>{post}</textarea>
+      </div>
+      <div>
+        <label for="draft" class={label}>Your DM</label>
+        <textarea id="draft" name="draft" rows={6} maxlength={10000} required class={`${input} mt-1.5`}>{draft}</textarea>
+      </div>
+      {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="check" />}
+      <button type="submit" class={`${button({ variant: "default", size: "lg" })} w-full sm:w-auto`}>Check my DM</button>
+    </form>
+    {(rules || model) && <Results rules={rules} model={model} />}
+  </Shell>
 );
