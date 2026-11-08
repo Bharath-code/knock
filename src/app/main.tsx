@@ -57,6 +57,8 @@ const App = () => {
   const [note, setNote] = useState("");
   const [info, setInfo] = useState("");
   const [booking, setBooking] = useState("");
+  const [account, setAccount] = useState<{ email: string | null; handle: string | null } | null>(null);
+  const [emailIn, setEmailIn] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [poolDoor, setPoolDoor] = useState("");
   const [codeText, setCodeText] = useState("");
@@ -74,6 +76,17 @@ const App = () => {
   useEffect(() => {
     api.inbox.booking.$get().then(async (r) => r.ok && setBooking((await r.json()).url ?? "")).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.inbox.account.$get().then(async (r) => r.ok && setAccount(await r.json())).catch(() => {});
+  }, []);
+
+  const sendEmail = async () => {
+    setError("");
+    const r = await api.inbox.email.$post({ json: { email: emailIn } }).catch(() => null);
+    if (!r?.ok) return setError(((await r?.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't send the link.");
+    setInfo("Check your email and open the link to confirm it.");
+  };
 
   const loadPools = useCallback(async () => {
     const r = await api.inbox.codes.$get().catch(() => null);
@@ -305,6 +318,20 @@ const App = () => {
             <input type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="Choose a CSV of codes" className="mt-2 block w-full text-sm" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setCodeText(await f.text()); }} />
             <p className="mt-2 text-xs text-muted">Each Yes emails one unused code to that sender. Codes never appear in your inbox.</p>
             <button className="mt-3 min-h-11 w-full rounded-pill border border-line font-medium disabled:opacity-50" disabled={!codeText.trim()} onClick={() => void addCodes()}>Add codes</button>
+          </>
+        )}
+      </details>
+      <details className="mt-4 rounded-lg border border-line bg-card p-4">
+        <summary className="min-h-11 cursor-pointer font-medium leading-[44px]">Email and sign-in</summary>
+        {account?.email ? (
+          <p className="text-sm text-muted">Signed in as {account.email}. To sign in on another device, open <a className="underline" href="/signin">/signin</a> there.</p>
+        ) : (
+          <>
+            <label className="block text-sm text-muted">
+              Add your email to sign in on other devices and get your daily digest
+              <input type="email" value={emailIn} maxLength={254} autoComplete="email" onChange={(e) => setEmailIn(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card p-3 text-ink" />
+            </label>
+            <button className="mt-3 min-h-11 w-full rounded-pill border border-line font-medium disabled:opacity-50" disabled={!emailIn.trim()} onClick={() => void sendEmail()}>Send confirmation link</button>
           </>
         )}
       </details>

@@ -27,14 +27,14 @@ export const verifyTurnstile = async (
 };
 
 // ponytail: fixed hourly window in D1, so a burst across an hour boundary can double; use a Durable Object if that matters
-export const withinLimit = async (db: D1Database, key: string, now = Date.now()) => {
+export const withinLimit = async (db: D1Database, key: string, now = Date.now(), max = CHECKS_PER_HOUR) => {
   const row = await db
     .prepare(
       "INSERT INTO rate_limits (key, window, n) VALUES (?1, ?2, 1) ON CONFLICT (key, window) DO UPDATE SET n = n + 1 RETURNING n",
     )
     .bind(key, Math.floor(now / HOUR_MS))
     .first<{ n: number }>();
-  return (row?.n ?? 1) <= CHECKS_PER_HOUR;
+  return (row?.n ?? 1) <= max;
 };
 
 export const pruneLimits = (db: D1Database, now = Date.now()) =>

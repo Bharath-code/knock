@@ -59,7 +59,7 @@ export const NewDoorPage = ({ owner, siteKey, post = "", handle = "", name = "",
       </p>
       {error && <p role="alert" class="mt-5 rounded-md border border-no p-3 text-[15px] text-no">{error}</p>}
       <form method="post" action="/new" class="mt-6 space-y-4">
-        {!owner && (
+        {!owner?.handle && (
           <div class="grid gap-4 sm:grid-cols-2">
             <div>
               <label for="handle" class="font-medium">Your handle</label>

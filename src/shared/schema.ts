@@ -17,11 +17,13 @@ export const tables = [
   "feedback",
   "form_connections",
   "knocks",
+  "magic_links",
   "notification_prefs",
   "orgs",
   "outcomes",
   "passes",
   "people",
   "person_stats",
+  "sessions",
   "users",
 ] as const;

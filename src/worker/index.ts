@@ -2,13 +2,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { validator } from "hono/validator";
+import { z } from "zod";
 import { check as checkDraft } from "../shared/checker";
 import { createDoorSchema, defaultFields, pickTemplate, PROFILE_SLUG, handleSchema } from "../shared/door";
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
-import { sendClosure, sendReceipt, sendYes, type Closure, type Receipt } from "./email";
+import { sendClosure, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { confirmLink, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS } from "./auth";
+import { ConfirmPage, SigninPage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { closeExpired, notifyExpired } from "./expire";
@@ -19,8 +22,8 @@ import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
-import { createDoor, getDoor, ownerFromToken } from "./doors";
-import { gate, ipKey, pruneLimits } from "./gate";
+import { createDoor, getDoor, ownerFromToken, sha256 } from "./doors";
+import { gate, ipKey, pruneLimits, withinLimit } from "./gate";
 import { answerKnock, closeRest, listInbox, ownerDoorIds, ownerUser, ownsDoor, undoKnock, type OwnerUser } from "./inbox";
 import { asAnswer, asReason, NOTE_MAX, type Reply } from "../shared/inbox";
 import { Home } from "./home";
@@ -37,6 +40,23 @@ const validBody = validator("json", (value, c) => {
 
 type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string };
 type AppEnv = { Bindings: Secrets };
+
+const sameOrigin = (req: Request) => req.headers.get("origin") === new URL(req.url).origin;
+const emailSchema = z.string().trim().email().max(254);
+const LINKS_PER_EMAIL_HOUR = 3;
+
+// A link is sent at most 3 times an hour per address. Over the limit the caller still sees "check your email".
+const mailLink = async (env: Secrets, db: D1Database, to: string, origin: string, personId: string | null, handle?: string | null) => {
+  if (!(await withinLimit(db, `link-email:${await sha256(emailKey(to))}`, Date.now(), LINKS_PER_EMAIL_HOUR))) return;
+  const token = await requestLink(db, to, personId);
+  try {
+    await sendSignIn(env, { to, link: new URL(`/signin/confirm?t=${token}`, origin).href, handle });
+  } catch (e) {
+    console.error("sign-in email failed", e instanceof Error ? e.message : e);
+  }
+};
+
+const sessionCookie = (url: string) => ({ httpOnly: true, secure: new URL(url).protocol === "https:", sameSite: "Lax" as const, path: "/", maxAge: SESSION_MS / 1000 });
 
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
 
@@ -108,6 +128,21 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     if (bad.length) return c.json({ error: `Codes use 4 to 64 letters, digits, - or _. Fix: ${bad.slice(0, 3).join(", ")}` }, 400);
     if (!codes.length || codes.length > MAX_CODES) return c.json({ error: `Add between 1 and ${MAX_CODES} codes at a time.` }, 400);
     return c.json(await addCodes(c.env.DB, c.env.CODES_KEY, b.doorId, o.orgId, codes));
+  })
+  .get("/account", async (c) => {
+    const p = await personOfUser(c.env.DB, c.get("owner").userId);
+    return c.json({ email: p && !p.email.endsWith(PLACEHOLDER) ? p.email : null, handle: p?.handle ?? null });
+  })
+  .post("/email", async (c) => {
+    if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
+    const email = emailSchema.safeParse(((await c.req.json().catch(() => ({}))) as { email?: unknown }).email);
+    if (!email.success) return c.json({ error: "Enter a valid email address." }, 400);
+    const o = c.get("owner");
+    const p = await personOfUser(c.env.DB, o.userId);
+    if (!p || !p.email.endsWith(PLACEHOLDER)) return c.json({ error: "This account already has an email." }, 409);
+    if (!(await withinLimit(c.env.DB, `claim-user:${o.userId}`, Date.now(), 5))) return c.json({ error: "Too many tries. Try again in an hour." }, 429);
+    await mailLink(c.env, c.env.DB, email.data, new URL(c.req.url).origin, p.id, p.handle);
+    return c.json({ ok: true });
   })
   .get("/booking", async (c) => c.json({ url: await getBooking(c.env.DB, c.get("owner")) }))
   .put("/booking", async (c) => {
@@ -219,6 +254,37 @@ const app = new Hono<AppEnv>()
     return c.html(
       CheckerPage({ ...kept, rules: checkDraft(parsed.data.draft), model: result?.ok ? result.check : "unavailable" }),
     );
+  })
+  .get("/signin", (c) => c.html(SigninPage({ siteKey: c.env.TURNSTILE_SITE_KEY })))
+  .post("/signin", async (c) => {
+    if (!sameOrigin(c.req.raw)) return c.text("Forbidden", 403);
+    const form = await c.req.parseBody();
+    const one = (k: string) => (typeof form[k] === "string" ? (form[k] as string) : "");
+    const siteKey = c.env.TURNSTILE_SITE_KEY;
+    const email = emailSchema.safeParse(one("email"));
+    if (!email.success) return c.html(SigninPage({ siteKey, error: "Enter a valid email address.", email: one("email").slice(0, 254) }), 400);
+    const g = await gate(c.env, clientIp(c.req.raw), one("cf-turnstile-response"), "signin");
+    if (g !== "ok") return c.html(SigninPage({ siteKey, error: gateMessage[g], email: email.data }), g === "limited" ? 429 : g === "captcha" ? 403 : 503);
+    await mailLink(c.env, c.env.DB, email.data, new URL(c.req.url).origin, null);
+    return c.html(SigninPage({ sent: true }));
+  })
+  .get("/signin/confirm", async (c) => {
+    c.header("cache-control", "no-store");
+    c.header("referrer-policy", "no-referrer");
+    const token = c.req.query("t") ?? "";
+    const link = token ? await peekLink(c.env.DB, token) : null;
+    if (!link) return c.html(ConfirmPage({ token: "", error: "This link has expired or was already used. Ask for a new one." }), 400);
+    const replacing = (await ownerUser(c.env.DB, getCookie(c, "ds"))) !== null;
+    return c.html(ConfirmPage({ token, link: { email: link.email, handle: link.handle, claim: link.claim === 1, replacing } }));
+  })
+  .post("/signin/confirm", async (c) => {
+    if (!sameOrigin(c.req.raw)) return c.text("Forbidden", 403);
+    c.header("cache-control", "no-store");
+    const t = ((await c.req.parseBody()).t ?? "") as string;
+    const done = typeof t === "string" && t ? await confirmLink(c.env.DB, t) : null;
+    if (!done?.ok) return c.html(ConfirmPage({ token: "", error: done?.error ?? "This link is not valid. Ask for a new one." }), 400);
+    setCookie(c, "ds", done.token, sessionCookie(c.req.url));
+    return c.redirect("/app", 303);
   })
   .get("/new", async (c) => c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY })))
   .post("/new", async (c) => {
@@ -349,6 +415,7 @@ export default {
   async scheduled(event, env) {
     console.log("cron", event.cron);
     await pruneLimits(env.DB);
+    await pruneAuth(env.DB);
     await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
   },
 } satisfies ExportedHandler<Env>;

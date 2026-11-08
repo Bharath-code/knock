@@ -52,3 +52,22 @@ export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fe
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
 };
+
+export type SignIn = { to: string; link: string; handle?: string | null };
+
+export const sendSignIn = async (env: MailEnv, r: SignIn, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const what = r.handle ? `Confirm this email for your door @${r.handle}` : "Sign in to Doorbell";
+  const res = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: r.to,
+      subject: r.handle ? `Confirm your email for @${r.handle}` : "Your Doorbell sign-in link",
+      text: `${what}:\n${r.link}\n\nThe link works once and expires in 15 minutes. If you did not ask for it, ignore this email.`,
+    }),
+  });
+  if (!res.ok) throw new Error(`email provider ${res.status}`);
+  return "sent";
+};
