@@ -348,6 +348,7 @@ const App = () => {
       <div className="mt-6 flex justify-center gap-3">
         <Button asChild><a href="/new">Make a door</a></Button>
         <Button asChild variant="outline"><a href="/signin">Sign in</a></Button>
+        <Button asChild variant="ghost"><a href="/example">See an example</a></Button>
       </div>
     </div>
   ) : cards === null ? (
@@ -371,6 +372,7 @@ const App = () => {
       <InboxIcon className="mx-auto size-8 text-muted-foreground" aria-hidden />
       <h1 className="mt-4 text-2xl">{answered.current.size ? "All answered" : "No knocks yet"}</h1>
       <p className="mt-2 text-muted-foreground">Post your door link as the first reply under your post. New knocks show up here live.</p>
+      <Button asChild variant="outline" className="mt-6"><a href="/example">See what a knock looks like</a></Button>
     </div>
   ) : (
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[20rem_minmax(0,1fr)] lg:py-10">

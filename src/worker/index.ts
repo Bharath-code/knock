@@ -8,7 +8,7 @@ import { createDoorSchema, defaultFields, pickTemplate, PROFILE_SLUG, handleSche
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
-import { DeletedPage, DoorPage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
+import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
 import { asRef, asTemplate } from "../shared/growth";
 import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
@@ -459,6 +459,7 @@ const app = new Hono<AppEnv>()
     return c.html(DeletedPage());
   })
   .get("/privacy", (c) => c.html(PrivacyPage()))
+  .get("/example", (c) => c.html(ExamplePage()))
   // Private: only ADMIN_EMAILS see it; everyone else gets the same 404 as a missing page.
   .get("/feedback", (c) => c.html(FeedbackPage({ siteKey: c.env.TURNSTILE_SITE_KEY, page: cleanPage(c.req.query("from") ?? "") })))
   .post("/feedback", async (c) => {
