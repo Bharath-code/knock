@@ -27,7 +27,9 @@ import { asSource, emailKey, knockSchema } from "../shared/knock";
 import { ogPng } from "./og";
 import { createDoor, getDoor, ownerFromToken, sha256 } from "./doors";
 import { gate, ipKey, pruneLimits, withinLimit } from "./gate";
-import { answerKnock, closeRest, listInbox, ownerDoorIds, ownerUser, ownsDoor, undoKnock, type OwnerUser } from "./inbox";
+import { d1Metrics, eventCounts, isAdmin, isBot, track, viewSource } from "./metrics";
+import { MetricsPage } from "./metrics-page";
+import { answerKnock, closeRest, listInbox, markSeen, ownerDoorIds, ownerUser, ownsDoor, undoKnock, type OwnerUser } from "./inbox";
 import { asAnswer, asReason, NOTE_MAX, type Reply } from "../shared/inbox";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
@@ -42,7 +44,7 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string; RANKER?: string };
+type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string; RANKER?: string; ADMIN_EMAILS?: string; FUNNEL_DATASET?: string; ANALYTICS_SQL?: { query(q: { query: string }): Promise<{ data: Record<string, unknown>[] }> } };
 type AppEnv = { Bindings: Secrets };
 
 const sameOrigin = (req: Request) => req.headers.get("origin") === new URL(req.url).origin;
@@ -84,7 +86,10 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     c.header("cache-control", "private, no-store");
     await next();
   })
-  .get("/", async (c) => c.json(await listInbox(c.env.DB, c.get("owner"))))
+  .get("/", async (c) => {
+    for (const id of await markSeen(c.env.DB, c.get("owner"))) track(c.env.FUNNEL, "seen", "", id);
+    return c.json(await listInbox(c.env.DB, c.get("owner")));
+  })
   .post(
     "/:id/answer",
     validator("json", (v, c) => {
@@ -104,6 +109,8 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     }
     const ok = await answerKnock(c.env.DB, c.get("owner"), c.req.param("id"), reply, at);
     if (!ok) return c.json({ error: "That knock is no longer open." }, 409);
+    track(c.env.FUNNEL, "answered", reply.answer, c.req.param("id"));
+    if (reply.answer === "yes") track(c.env.FUNNEL, "yes", "", c.req.param("id"));
     let code: Awaited<ReturnType<typeof yesCode>> = "none";
     if (reply.answer === "yes") {
       code = await yesCode(c.env.DB, c.req.param("id"));
@@ -184,6 +191,7 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
   .get("/doors", async (c) => c.json(await ownerDoorIds(c.env.DB, c.get("owner"))))
   .post("/close-rest", async (c) => {
     const closed = await closeRest(c.env.DB, c.get("owner"));
+    if (closed.length) track(c.env.FUNNEL, "answered", "close_rest", "", closed.length);
     const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
     const who = owner?.name || `@${owner?.handle ?? "your door"}`;
     for (let i = 0; i < closed.length; i += 100) {
@@ -335,7 +343,7 @@ const app = new Hono<AppEnv>()
   .get("/go/door", (c) => {
     const from = asRef(c.req.query("from"));
     const t = asTemplate(c.req.query("t"));
-    if (from) c.env.FUNNEL.writeDataPoint({ blobs: ["own_door_click", from, t ?? ""], indexes: ["own_door_click"] });
+    if (from) track(c.env.FUNNEL, "own_door_click", from, t ?? "");
     return c.redirect(`/new${from ? `?ref=${from}${t ? `&t=${t}` : ""}` : ""}`, 302);
   })
   .get("/new", async (c) =>
@@ -376,7 +384,7 @@ const app = new Hono<AppEnv>()
     }
     const made = await createDoor(c.env.DB, parsed.data, token);
     if (!made.ok) return bad(made.error);
-    if (ref) c.env.FUNNEL.writeDataPoint({ blobs: ["own_door_created", ref, parsed.data.template], indexes: ["own_door_created"] });
+    if (ref) track(c.env.FUNNEL, "own_door_created", ref, parsed.data.template);
     if (made.token) setCookie(c, "ds", made.token, { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/", maxAge: 31_536_000 });
     return c.redirect(made.slug === PROFILE_SLUG ? `/d/${made.handle}?made=1` : `/d/${made.handle}/${made.slug}?made=1`, 303);
   })
@@ -388,6 +396,8 @@ const app = new Hono<AppEnv>()
     const slug = c.req.param("slug");
     const door = await getDoor(c.env.DB, c.req.param("handle"), slug);
     if (!door || door.status !== "open") return c.html(NotFoundDoor(), 404);
+    // ponytail: a submit attempt stands in for "started the form", so public pages stay script-free
+    track(c.env.FUNNEL, "knock_start", viewSource(c.req.query("s")), door.id);
     const form = await c.req.parseBody({ all: true });
     const one = (k: string) => (typeof form[k] === "string" ? (form[k] as string) : "");
     const answers = [form.answer ?? []].flat().filter((v): v is string => typeof v === "string");
@@ -395,7 +405,7 @@ const app = new Hono<AppEnv>()
     const kept = { email: one("email").slice(0, 254), message: one("message").slice(0, 2000), answers, proof: one("proof").slice(0, 300) };
     const path = `/d/${door.handle}/${slug}`;
     const again = (error: string, status: 400 | 403 | 409 | 429 | 503) =>
-      c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: false, siteKey: c.env.TURNSTILE_SITE_KEY, source, form: { ...kept, error } }), status);
+      c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: false, siteKey: c.env.TURNSTILE_SITE_KEY, source: viewSource(c.req.query("s")), form: { ...kept, error } }), status);
     const parsed = knockSchema(door.fields.length).safeParse({ ...kept, consent: one("consent") });
     if (!parsed.success) return again("Fill every question, add your message and a valid email, and tick the consent box.", 400);
     const g = await gate(c.env, clientIp(c.req.raw), one("cf-turnstile-response"), "knock");
@@ -413,6 +423,7 @@ const app = new Hono<AppEnv>()
         ? again("You already knocked on this door. Check your email for your status link.", 409)
         : again("Too many knocks from your network on this door. Try again in an hour.", 429);
     }
+    track(c.env.FUNNEL, "knock_sent", viewSource(c.req.query("s")), door.id);
     const link = new URL(`/k/${result.token}`, c.req.url).href;
     await c.env.JOBS.send({ type: "receipt", to: k.email, link, who: door.name || `@${door.handle}`, days: door.windowDays });
     return c.redirect(`/k/${result.token}`, 303);
@@ -429,6 +440,16 @@ const app = new Hono<AppEnv>()
     return c.html(DeletedPage());
   })
   .get("/privacy", (c) => c.html(PrivacyPage()))
+  // Private: only ADMIN_EMAILS see it; everyone else gets the same 404 as a missing page.
+  .get("/admin/metrics", async (c) => {
+    c.header("cache-control", "private, no-store");
+    c.header("x-robots-tag", "noindex, nofollow");
+    const o = await ownerUser(c.env.DB, getCookie(c, "ds"));
+    const p = o && (await personOfUser(c.env.DB, o.userId));
+    if (!p || !isAdmin(p.email, c.env.ADMIN_EMAILS)) return c.html(NotFoundDoor(), 404);
+    const [d1, events] = await Promise.all([d1Metrics(c.env.DB), eventCounts(c.env.ANALYTICS_SQL, c.env.FUNNEL_DATASET)]);
+    return c.html(MetricsPage({ d1, events }));
+  })
   .get("/k/:token", async (c) => {
     const token = c.req.param("token");
     c.header("x-robots-tag", "noindex, nofollow");
@@ -443,8 +464,9 @@ const app = new Hono<AppEnv>()
     const slug = c.req.param("slug") ?? PROFILE_SLUG;
     const door = await getDoor(c.env.DB, handle, slug);
     if (!door) return c.html(NotFoundDoor(), 404);
+    if (!isBot(c.req.header("user-agent"))) track(c.env.FUNNEL, "door_view", viewSource(c.req.query("s")), door.id);
     const path = slug === PROFILE_SLUG ? `/d/${handle}` : `/d/${handle}/${slug}`;
-    return c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: c.req.query("made") === "1", siteKey: c.env.TURNSTILE_SITE_KEY, source: asSource(c.req.query("s")) }));
+    return c.html(DoorPage({ door, url: new URL(path, c.req.url).href, made: c.req.query("made") === "1", siteKey: c.env.TURNSTILE_SITE_KEY, source: viewSource(c.req.query("s")) }));
   })
   .get("/app/*", (c) => c.env.ASSETS.fetch(new URL("/", c.req.url)))
   .get("/app", (c) => c.env.ASSETS.fetch(new URL("/", c.req.url)))

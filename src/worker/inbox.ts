@@ -40,6 +40,18 @@ export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()):
   });
 };
 
+// The first time a knock reaches the receiver's inbox it counts as seen. RETURNING gives each id once, ever.
+export const markSeen = async (db: D1Database, o: OwnerUser, now = Date.now()) => {
+  const { results } = await db
+    .prepare(
+      `UPDATE knocks SET seen_at = ?2, status = 'seen' WHERE status = 'new' AND seen_at IS NULL AND expires_at > ?2
+       AND door_id IN (SELECT id FROM doors WHERE owner_user_id = ?1) RETURNING id`,
+    )
+    .bind(o.userId, now)
+    .all<{ id: string }>();
+  return results.map((r) => r.id);
+};
+
 const pending = `k.id = ?1 AND k.status IN ('new', 'seen') AND k.expires_at > ?2 AND k.door_id IN (SELECT id FROM doors WHERE owner_user_id = ?3)`;
 
 export const answerKnock = async (db: D1Database, o: OwnerUser, knockId: string, r: Reply, now = Date.now()) => {

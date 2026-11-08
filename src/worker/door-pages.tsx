@@ -184,7 +184,7 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
           <h2 id="live" class="text-xl">Your door is live</h2>
           <label for="reply" class={`mt-3 ${label}`}>Paste this in your post or bio</label>
           <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
-            <input id="reply" readonly value={door.kind === "profile" ? url : replyLine(`${url}?s=reply`)} class={`${input} font-mono text-sm`} />
+            <input id="reply" readonly value={door.kind === "profile" ? `${url}?s=bio` : replyLine(`${url}?s=reply`)} class={`${input} font-mono text-sm`} />
             <button type="button" data-copy="reply" class={btn({ variant: "default" })}>Copy</button>
           </div>
         </section>
