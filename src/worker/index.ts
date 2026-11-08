@@ -87,7 +87,8 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     await next();
   })
   .get("/", async (c) => {
-    for (const id of await markSeen(c.env.DB, c.get("owner"))) track(c.env.FUNNEL, "seen", "", id);
+    const seen = await markSeen(c.env.DB, c.get("owner"));
+    if (seen.length) track(c.env.FUNNEL, "seen", "", "", seen.length);
     return c.json(await listInbox(c.env.DB, c.get("owner")));
   })
   .post(
@@ -259,6 +260,10 @@ const app = new Hono<AppEnv>()
       queue: await check(() => c.env.JOBS.send({ type: "smoke" })),
       analytics: await check(async () => {
         c.env.FUNNEL.writeDataPoint({ blobs: ["smoke"], indexes: ["smoke"] });
+      }),
+      analyticsSql: await check(async () => {
+        const r = await eventCounts(c.env.ANALYTICS_SQL, c.env.FUNNEL_DATASET);
+        if (r && "error" in r) throw new Error(r.error);
       }),
     };
     return c.json(results, Object.values(results).every((r) => r === "ok") ? 200 : 500);

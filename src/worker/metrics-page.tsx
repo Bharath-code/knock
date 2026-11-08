@@ -1,5 +1,5 @@
 /** @jsxImportSource hono/jsx */
-import { card, notice } from "../shared/ui";
+import { alert, card, notice } from "../shared/ui";
 import { Shell } from "./door-pages";
 import { TARGETS, verdict, type D1Metrics, type EventCounts, type Verdict } from "./metrics";
 
@@ -27,7 +27,9 @@ const FUNNEL = [
 
 const SOURCES = ["reply", "bio", "direct"] as const;
 
-export const MetricsPage = ({ d1, events }: { d1: D1Metrics; events: EventCounts | null }) => {
+export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventCounts | { error: string } | null }) => {
+  const failed = raw && "error" in raw ? raw.error : null;
+  const events = Array.isArray(raw) ? raw : null;
   const sum = (event: string, detail?: string) => (events ?? []).filter((e) => e.event === event && (detail === undefined || e.detail === detail)).reduce((a, e) => a + e.n, 0);
   return (
     <Shell title="Metrics | Doorbell" description="Private funnel dashboard." wide head={<meta name="robots" content="noindex, nofollow" />}>
@@ -65,7 +67,9 @@ export const MetricsPage = ({ d1, events }: { d1: D1Metrics; events: EventCounts
 
       <section class="mt-10" aria-labelledby="funnel">
         <h2 id="funnel" class="text-xl">Funnel events</h2>
-        {events === null ? (
+        {failed ? (
+          <p class={`mt-4 ${alert}`} role="alert">The event query failed: {failed}</p>
+        ) : events === null ? (
           <p class={`mt-4 ${notice}`}>Event counts are unavailable here. They load on Cloudflare through the Analytics SQL binding, not in local dev.</p>
         ) : (
           <>

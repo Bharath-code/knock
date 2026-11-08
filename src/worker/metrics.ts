@@ -62,17 +62,20 @@ export type EventCounts = { event: string; detail: string; n: number }[];
 
 type AnalyticsSql = { query(q: { query: string; params?: unknown }): Promise<{ data: Record<string, unknown>[] }> };
 
-export const eventCounts = async (sql: AnalyticsSql | undefined, dataset: string | undefined): Promise<EventCounts | null> => {
-  if (!sql || !dataset || !/^[a-z0-9_]+$/.test(dataset)) return null;
+// null = no binding (local dev); { error } = the query itself failed, so the page never mistakes one for the other.
+export const eventCounts = async (sql: AnalyticsSql | undefined, dataset: string | undefined): Promise<EventCounts | { error: string } | null> => {
+  if (!sql || !dataset) return null;
+  if (!/^[a-z0-9_]+$/.test(dataset)) return { error: "FUNNEL_DATASET is not a plain dataset name." };
   try {
     const { data } = await sql.query({
-      query: `SELECT blob1 AS event, blob2 AS detail, SUM(double1) AS n FROM events.analyticsEngine.${dataset}
-              WHERE timestamp >= NOW() - INTERVAL '14' DAY GROUP BY event, detail ORDER BY event, detail`,
+      query: `SELECT blob1, blob2, SUM(double1) AS n FROM events.analyticsEngine.${dataset}
+              WHERE timestamp >= NOW() - INTERVAL '14' DAY GROUP BY blob1, blob2`,
     });
-    return data.map((r) => ({ event: String(r.event), detail: String(r.detail ?? ""), n: Number(r.n) }));
+    return data.map((r) => ({ event: String(r.blob1), detail: String(r.blob2 ?? ""), n: Number(r.n) }));
   } catch (e) {
-    console.error("funnel query failed", e instanceof Error ? e.message : e);
-    return null;
+    const error = e instanceof Error ? e.message : String(e);
+    console.error("funnel query failed", error);
+    return { error };
   }
 };
 
