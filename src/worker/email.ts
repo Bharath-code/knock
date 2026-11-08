@@ -1,5 +1,5 @@
 export type Receipt = { to: string; link: string; who: string; days: number };
-export type Closure = { to: string; message: string; who: string; later?: boolean };
+export type Closure = { to: string; message: string; who: string; later?: boolean; expired?: boolean };
 export type MailEnv = { RESEND_API_KEY?: string; EMAIL_FROM?: string };
 
 // ponytail: Resend over plain fetch; swap this one function for another provider
@@ -25,7 +25,7 @@ export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetc
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)` }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)` }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";

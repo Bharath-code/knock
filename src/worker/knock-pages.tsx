@@ -78,9 +78,9 @@ export const StatusBody = ({ s, link }: { s: Status; link: string }) => (
       <Step done label="Delivered" at={s.createdAt} />
       <Step done={s.seenAt !== null} label="Seen" at={s.seenAt} hint="Not seen yet" />
       <Step
-        done={s.answeredAt !== null}
-        label={s.answer ? `Answer: ${ANSWER_LABEL[s.answer] ?? s.answer}` : "Answer"}
-        at={s.answeredAt}
+        done={s.answeredAt !== null || s.answer === "expired"}
+        label={s.answer === "expired" ? ANSWER_LABEL.expired! : s.answer ? `Answer: ${ANSWER_LABEL[s.answer] ?? s.answer}` : "Answer"}
+        at={s.answeredAt ?? (s.answer === "expired" ? s.expiresAt : null)}
         hint={`You will hear back by ${when(s.expiresAt)}`}
       />
     </ol>

@@ -20,3 +20,7 @@ const COPY: Record<string, Record<ClosureAnswer, string>> = {
 };
 
 export const closureMessage = (template: string, answer: ClosureAnswer) => (COPY[template] ?? COPY.profile!)[answer];
+
+export const EXPIRED_NOTE = "They didn't get to it";
+export const expiredMessage = (who: string) =>
+  `${who} didn't get to your knock before the window closed. That says nothing about your message. Feel free to knock again, or try another door.`;

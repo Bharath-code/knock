@@ -11,6 +11,7 @@ import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
 import { sendClosure, sendReceipt, sendYes, type Closure, type Receipt } from "./email";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
+import { closeExpired, notifyExpired } from "./expire";
 import { closeJob, knockTemplate, stillAnswered, type CloseJob } from "./closure";
 import { MAX_CODES, parseCodes } from "../shared/codes";
 import { addCodes, codeFor, pools, yesCode } from "./codes";
@@ -348,5 +349,6 @@ export default {
   async scheduled(event, env) {
     console.log("cron", event.cron);
     await pruneLimits(env.DB);
+    await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
   },
 } satisfies ExportedHandler<Env>;
