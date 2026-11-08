@@ -5,6 +5,7 @@ import { confirmLink, deviceLabel, IDLE_MS, LINK_MS, peekLink, requestLink, SESS
 import { createDoor, ownerFromToken, sha256 } from "./doors";
 import { ownerUser } from "./inbox";
 import { fakeDb } from "./testdb";
+import { deleteByToken } from "./retention";
 
 const input = (handle: string, post = "") => ({ handle, name: "Newbie", post, template: "referral" as const, fields: ["-"], window: 7 as const });
 
@@ -127,6 +128,12 @@ test("claiming the exact address a sender knocked from merges their knocks; an a
   expect(sqlite.query("SELECT id FROM people WHERE id = 'snd'").get()).toBeNull();
   expect(sqlite.query("SELECT email FROM people WHERE id = 'anon'").get()).toEqual({ email: "k@x.com" });
   expect(sqlite.query("SELECT from_sender FROM doors WHERE id = 'mine'").get()).toEqual({ from_sender: 1 });
+
+  // The owner now owns a knock; deleting it must not cascade away their account and doors.
+  sqlite.run(`UPDATE knocks SET token_hash = '${await sha256("tok1")}' WHERE id = 'k1'`);
+  expect(await deleteByToken(db, "tok1")).not.toBeNull();
+  expect(sqlite.query("SELECT COUNT(*) n FROM users WHERE person_id = 'anon'").get()).toEqual({ n: 1 });
+  expect(sqlite.query("SELECT id FROM doors WHERE id = 'mine'").get()).toEqual({ id: "mine" });
 });
 
 test("a door made from a knock's link stores it; a door by someone who knocked before is flagged; a forged id stores nothing", async () => {
