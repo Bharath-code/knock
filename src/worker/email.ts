@@ -71,3 +71,21 @@ export const sendSignIn = async (env: MailEnv, r: SignIn, fetcher: typeof fetch 
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
 };
+
+export type NewSignIn = { to: string; device: string; when: string; link: string };
+
+export const sendNewSignIn = async (env: MailEnv, r: NewSignIn, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const res = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: r.to,
+      subject: "New sign-in to your Doorbell account",
+      text: `Your Doorbell account was just signed in on a new device.\n\nDevice: ${r.device}\nTime: ${r.when}\n\nIf this was you, no action is needed. If not, open your inbox and choose "Sign out everywhere":\n${r.link}`,
+    }),
+  });
+  if (!res.ok) throw new Error(`email provider ${res.status}`);
+  return "sent";
+};

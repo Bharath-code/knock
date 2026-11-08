@@ -81,6 +81,13 @@ const App = () => {
     api.inbox.account.$get().then(async (r) => r.ok && setAccount(await r.json())).catch(() => {});
   }, []);
 
+  const signOut = async (all: boolean) => {
+    setError("");
+    const r = await api.inbox.signout.$post({ json: { all } }).catch(() => null);
+    if (!r?.ok) return setError(((await r?.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't sign you out.");
+    location.href = "/signin";
+  };
+
   const sendEmail = async () => {
     setError("");
     const r = await api.inbox.email.$post({ json: { email: emailIn } }).catch(() => null);
@@ -324,7 +331,12 @@ const App = () => {
       <details className="mt-4 rounded-lg border border-line bg-card p-4">
         <summary className="min-h-11 cursor-pointer font-medium leading-[44px]">Email and sign-in</summary>
         {account?.email ? (
-          <p className="text-sm text-muted">Signed in as {account.email}. To sign in on another device, open <a className="underline" href="/signin">/signin</a> there.</p>
+          <>
+            <p className="text-sm text-muted">Signed in as {account.email}. To sign in on another device, open <a className="underline" href="/signin">/signin</a> there.</p>
+            <button className="mt-3 min-h-11 w-full rounded-pill border border-line font-medium" onClick={() => void signOut(false)}>Sign out</button>
+            <button className="mt-2 min-h-11 w-full rounded-pill border border-no font-medium text-no" onClick={() => void signOut(true)}>Sign out everywhere</button>
+            <p className="mt-2 text-xs text-muted">Everywhere signs out every device, including older links from before you added an email.</p>
+          </>
         ) : (
           <>
             <label className="block text-sm text-muted">

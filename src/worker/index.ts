@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Hono } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { validator } from "hono/validator";
 import { z } from "zod";
 import { check as checkDraft } from "../shared/checker";
@@ -9,8 +9,8 @@ import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
-import { sendClosure, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
-import { confirmLink, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS } from "./auth";
+import { sendClosure, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
 import { ConfirmPage, SigninPage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
@@ -142,6 +142,19 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     if (!p || !p.email.endsWith(PLACEHOLDER)) return c.json({ error: "This account already has an email." }, 409);
     if (!(await withinLimit(c.env.DB, `claim-user:${o.userId}`, Date.now(), 5))) return c.json({ error: "Too many tries. Try again in an hour." }, 429);
     await mailLink(c.env, c.env.DB, email.data, new URL(c.req.url).origin, p.id, p.handle);
+    return c.json({ ok: true });
+  })
+  .post("/signout", async (c) => {
+    if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
+    const all = ((await c.req.json().catch(() => ({}))) as { all?: unknown }).all === true;
+    const o = c.get("owner");
+    if (all) {
+      if (!(await signOutEverywhere(c.env.DB, o.userId, o.orgId))) return c.json({ error: "Add and confirm an email first, so you can sign back in." }, 409);
+    } else {
+      const t = getCookie(c, "ds");
+      if (t) await signOut(c.env.DB, t);
+    }
+    deleteCookie(c, "ds", { path: "/" });
     return c.json({ ok: true });
   })
   .get("/booking", async (c) => c.json({ url: await getBooking(c.env.DB, c.get("owner")) }))
@@ -281,8 +294,14 @@ const app = new Hono<AppEnv>()
     if (!sameOrigin(c.req.raw)) return c.text("Forbidden", 403);
     c.header("cache-control", "no-store");
     const t = ((await c.req.parseBody()).t ?? "") as string;
-    const done = typeof t === "string" && t ? await confirmLink(c.env.DB, t) : null;
+    const device = deviceLabel(c.req.header("user-agent"));
+    const done = typeof t === "string" && t ? await confirmLink(c.env.DB, t, Date.now(), device) : null;
     if (!done?.ok) return c.html(ConfirmPage({ token: "", error: done?.error ?? "This link is not valid. Ask for a new one." }), 400);
+    if (done.alert) {
+      await sendNewSignIn(c.env, { to: done.alert, device, when: new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC", link: new URL("/app", c.req.url).href }).catch((e) =>
+        console.error("sign-in alert failed", e instanceof Error ? e.message : e),
+      );
+    }
     setCookie(c, "ds", done.token, sessionCookie(c.req.url));
     return c.redirect("/app", 303);
   })

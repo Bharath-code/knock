@@ -1,17 +1,17 @@
 import { CLOSE_MESSAGE, CLOSE_REASON, UNDO_MS, type InboxCard, type Reply } from "../shared/inbox";
-import { SESSION_MS } from "./auth";
+import { SESSION_SQL, sessionBinds, touchSession } from "./auth";
 import { sha256 } from "./doors";
 
 export type OwnerUser = { userId: string; orgId: string };
 
 export const ownerUser = async (db: D1Database, token: string | undefined, now = Date.now()): Promise<OwnerUser | null> => {
   if (!token) return null;
+  const hash = await sha256(token);
   const r = await db
-    .prepare(
-      "SELECT u.id, u.org_id FROM people p JOIN users u ON u.person_id = p.id WHERE p.owner_token_hash = ?1 OR p.id IN (SELECT person_id FROM sessions WHERE token_hash = ?1 AND created_at > ?2)",
-    )
-    .bind(await sha256(token), now - SESSION_MS)
+    .prepare(`SELECT u.id, u.org_id FROM people p JOIN users u ON u.person_id = p.id WHERE p.owner_token_hash = ?1 OR p.id IN (${SESSION_SQL})`)
+    .bind(...sessionBinds(hash, now))
     .first<{ id: string; org_id: string }>();
+  if (r) await touchSession(db, hash, now);
   return r ? { userId: r.id, orgId: r.org_id } : null;
 };
 

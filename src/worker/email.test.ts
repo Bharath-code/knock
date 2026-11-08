@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sendClosure, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
+import { sendClosure, sendNewSignIn, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
 
 const r = { to: "a@x.com", link: "https://d.dev/k/abc", who: "Akash", days: 7 };
 const reply = (status: number, seen: { body?: string }) =>
@@ -80,4 +80,16 @@ test("sign-in email carries the link and says when it expires; a claim names the
   expect(JSON.parse(seen.body!).subject).toBe("Confirm your email for @akash");
   expect(sendSignIn(env, { to: "a@x.com", link: "l" }, reply(500, {}))).rejects.toThrow("email provider 500");
   expect(await sendSignIn({}, { to: "a@x.com", link: "l" })).toBe("unconfigured");
+});
+
+test("new-sign-in alert names the device and time and points to sign out everywhere", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  const seen: { body?: string } = {};
+  await sendNewSignIn(env, { to: "a@x.com", device: "Safari on iOS", when: "2026-11-08 10:00 UTC", link: "https://d.dev/app" }, reply(200, seen));
+  const b = JSON.parse(seen.body!);
+  expect(b.subject).toBe("New sign-in to your Doorbell account");
+  expect(b.text).toContain("Safari on iOS");
+  expect(b.text).toContain("2026-11-08 10:00 UTC");
+  expect(b.text).toContain("Sign out everywhere");
+  expect(await sendNewSignIn({}, { to: "a@x.com", device: "d", when: "w", link: "l" })).toBe("unconfigured");
 });
