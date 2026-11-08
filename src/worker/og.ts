@@ -63,17 +63,47 @@ const wrap = (text: string, width: number, maxLines: number) => {
     : lines;
 };
 
+const text = (x: number, y: number, size: number, fill: string, s: string, extra = "") =>
+  `<text x="${x}" y="${y}" font-family="Figtree" font-weight="800" font-size="${size}" fill="${fill}" ${extra}>${esc(s)}</text>`;
+
+const frame = (inner: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#f5f6f9"/><rect x="60" y="60" width="1080" height="510" rx="24" fill="#fff" stroke="#e1e4ee" stroke-width="2"/>${text(110, 140, 26, "#946000", "DOORBELL", 'letter-spacing="4"')}${inner}</svg>`;
+
 export const ogSvg = (d: DoorView) => {
   const who = d.name || `@${d.handle}`;
   const body = wrap(d.kind === "profile" ? "Every knock gets an answer." : d.post, 32, 4);
-  const text = (x: number, y: number, size: number, fill: string, s: string, extra = "") =>
-    `<text x="${x}" y="${y}" font-family="Figtree" font-weight="800" font-size="${size}" fill="${fill}" ${extra}>${esc(s)}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#f5f6f9"/><rect x="60" y="60" width="1080" height="510" rx="24" fill="#fff" stroke="#e1e4ee" stroke-width="2"/>${text(110, 140, 26, "#946000", "DOORBELL", 'letter-spacing="4"')}${text(110, 215, 34, "#5d6480", `${who} is asking`)}${body
-    .map((l, i) => text(110, 300 + i * 62, 52, "#141829", l))
-    .join("")}${text(110, 530, 30, "#0b7a57", `Answered within ${d.windowDays} days, guaranteed`)}</svg>`;
+  return frame(
+    `${text(110, 215, 34, "#5d6480", `${who} is asking`)}${body.map((l, i) => text(110, 300 + i * 62, 52, "#141829", l)).join("")}${text(110, 530, 30, "#0b7a57", `Answered within ${d.windowDays} days, guaranteed`)}`,
+  );
 };
 
-export const ogPng = async (d: DoorView) => {
-  const font = await init();
-  return new Resvg(ogSvg(d), { font: { fontBuffers: [font], defaultFontFamily: "Figtree", loadSystemFonts: false } }).render().asPng();
+const int = (v: string | undefined, min: number, max: number) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? Math.min(max, Math.max(min, n)) : min;
 };
+
+export const scoreSvg = (fit?: string) => {
+  const n = int(fit, 1, 5);
+  const ring = (i: number) => `<circle cx="${620 + i * 90}" cy="340" r="32" fill="${i < n ? "#946000" : "#e1e4ee"}"/>`;
+  return frame(
+    `${text(110, 230, 34, "#5d6480", "My ask scored")}${text(110, 420, 160, "#141829", `${n}/5`)}${[0, 1, 2, 3, 4].map(ring).join("")}${text(110, 530, 30, "#0b7a57", "Checked on Doorbell")}`,
+  );
+};
+
+export const answeredSvg = (count?: string, minutes?: string) => {
+  const n = int(count, 1, 999);
+  const m = int(minutes, 0, 99_999);
+  const took = m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} days`;
+  return frame(
+    `${text(110, 230, 34, "#5d6480", "All answered")}${text(110, 400, 140, "#141829", `${n} ${n === 1 ? "person" : "people"}`)}${text(110, 470, 40, "#5d6480", `got closure in ${took}`)}${text(110, 530, 30, "#0b7a57", "Every knock gets an answer")}`,
+  );
+};
+
+const png = async (svg: string) => {
+  const font = await init();
+  return new Resvg(svg, { font: { fontBuffers: [font], defaultFontFamily: "Figtree", loadSystemFonts: false } }).render().asPng();
+};
+
+export const ogPng = (d: DoorView) => png(ogSvg(d));
+export const scorePng = (fit?: string) => png(scoreSvg(fit));
+export const answeredPng = (count?: string, minutes?: string) => png(answeredSvg(count, minutes));

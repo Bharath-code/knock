@@ -24,7 +24,7 @@ import { addCodes, codeFor, pools, yesCode } from "./codes";
 import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking";
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
-import { ogPng } from "./og";
+import { answeredPng, ogPng, scorePng } from "./og";
 import { createDoor, getDoor, ownerFromToken, sha256 } from "./doors";
 import { gate, ipKey, pruneLimits, withinLimit } from "./gate";
 import { d1Metrics, eventCounts, isAdmin, isBot, track, viewSource } from "./metrics";
@@ -64,6 +64,7 @@ const mailLink = async (env: Secrets, db: D1Database, to: string, origin: string
 
 const sessionCookie = (url: string) => ({ httpOnly: true, secure: new URL(url).protocol === "https:", sameSite: "Lax" as const, path: "/", maxAge: SESSION_MS / 1000 });
 
+const cardResponse = (png: Uint8Array) => new Response(png as unknown as ArrayBuffer, { headers: { "content-type": "image/png", "cache-control": "public, max-age=3600" } });
 const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ?? "unknown";
 
 const runModel = async (env: Secrets, input: { post: string; draft: string }): Promise<ModelResult | null> => {
@@ -395,6 +396,8 @@ const app = new Hono<AppEnv>()
     if (made.token) setCookie(c, "ds", made.token, { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/", maxAge: 31_536_000 });
     return c.redirect(made.slug === PROFILE_SLUG ? `/d/${made.handle}?made=1` : `/d/${made.handle}/${made.slug}?made=1`, 303);
   })
+  .get("/og/score.png", async (c) => cardResponse(await scorePng(c.req.query("s"))))
+  .get("/og/answered.png", async (c) => cardResponse(await answeredPng(c.req.query("n"), c.req.query("m"))))
   .get("/d/:handle/:slug/og.png", async (c) => {
     const door = await getDoor(c.env.DB, c.req.param("handle"), c.req.param("slug"));
     return door ? new Response((await ogPng(door)) as unknown as ArrayBuffer, { headers: { "content-type": "image/png", "cache-control": "public, max-age=300" } }) : c.notFound();

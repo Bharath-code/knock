@@ -45,6 +45,13 @@ assert("check returns all five rules", ["length", "numbers", "link", "ask", "typ
 assert("check under 300 ms", checkMs < 300, `${checkMs} ms`);
 assert("check rejects a bad body", (await post({ draft: "   " })).status === 400);
 
+for (const path of ["/og/score.png?s=4", "/og/answered.png?n=7&m=95"]) {
+  const t = Date.now();
+  const img = await fetch(`${base}${path}`);
+  const bytes = new Uint8Array(await img.arrayBuffer());
+  assert(`share card ${path}`, img.ok && img.headers.get("content-type") === "image/png" && bytes[1] === 0x50, `${Date.now() - t} ms`);
+}
+
 assert("smoke needs a token",(await fetch(`${base}/api/smoke`)).status === 404);
 
 const smoke = await fetch(`${base}/api/smoke`, { headers: { "x-smoke-token": token } });
