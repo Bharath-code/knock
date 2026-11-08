@@ -1,0 +1,3 @@
+ALTER TABLE feedback ADD COLUMN contact TEXT;
+ALTER TABLE feedback ADD COLUMN page TEXT;
+ALTER TABLE feedback ADD COLUMN reviewed_at INTEGER;

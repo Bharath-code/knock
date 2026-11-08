@@ -54,7 +54,10 @@ export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, c
       <footer class={`${poweredBy ? "" : "mt-auto "}border-t border-line`}>
         <p class="mx-auto flex max-w-5xl flex-wrap justify-between gap-2 px-4 py-6 text-sm text-muted-foreground sm:px-6">
           <span>Doorbell. Every knock gets an answer.</span>
-          <a href="/privacy" class="text-muted-foreground hover:text-foreground">Privacy</a>
+          <span class="flex gap-4">
+            <a href="/feedback" class="text-muted-foreground hover:text-foreground">Talk to Bharath</a>
+            <a href="/privacy" class="text-muted-foreground hover:text-foreground">Privacy</a>
+          </span>
         </p>
       </footer>
       {copy && <script dangerouslySetInnerHTML={{ __html: copyScript }} />}

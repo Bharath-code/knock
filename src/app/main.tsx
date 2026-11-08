@@ -461,6 +461,7 @@ const App = () => {
             <a href="/app/settings" onClick={go("/app/settings")} aria-current={settings ? "page" : undefined} className={tab}>
               <SettingsIcon className="size-4" aria-hidden />Settings
             </a>
+            <a href={`/feedback?from=${encodeURIComponent(location.pathname)}`} className={tab}>Talk to Bharath</a>
           </nav>
           {!settings && open > 0 && (
             <AlertDialog>
