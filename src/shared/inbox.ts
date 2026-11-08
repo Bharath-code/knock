@@ -65,3 +65,6 @@ export const sortCards = (cs: InboxCard[]) =>
   [...cs].sort((a, b) => Number(a.fit == null) - Number(b.fit == null) || (b.fit ?? 0) - (a.fit ?? 0) || a.createdAt - b.createdAt);
 
 export const POLL_MS = 30_000;
+
+export const MOMENT_MIN = 3;
+export const minutesTaken = (ms: number) => Math.max(1, Math.round(ms / 60_000));

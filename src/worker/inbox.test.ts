@@ -234,3 +234,11 @@ test("expiry is scoped to its door, a sweep covers every door, and an answer in 
   expect(await answerKnock(db, owner, "late", { answer: "no" }, now)).toBe(true);
   expect(await closeExpired(db, null, now + 10_000)).toEqual([]);
 });
+
+test("moment time is whole minutes, never under one", async () => {
+  const { minutesTaken, MOMENT_MIN } = await import("../shared/inbox");
+  expect(minutesTaken(5_000)).toBe(1);
+  expect(minutesTaken(95_000)).toBe(2);
+  expect(minutesTaken(3_600_000)).toBe(60);
+  expect(MOMENT_MIN).toBe(3);
+});
