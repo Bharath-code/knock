@@ -9,9 +9,10 @@ import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
-import { sendClosure, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
-import { ConfirmPage, SigninPage } from "./auth-pages";
+import { ConfirmPage, SigninPage, UnsubscribePage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { closeExpired, notifyExpired } from "./expire";
@@ -38,7 +39,7 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string };
+type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string };
 type AppEnv = { Bindings: Secrets };
 
 const sameOrigin = (req: Request) => req.headers.get("origin") === new URL(req.url).origin;
@@ -131,7 +132,16 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
   })
   .get("/account", async (c) => {
     const p = await personOfUser(c.env.DB, c.get("owner").userId);
-    return c.json({ email: p && !p.email.endsWith(PLACEHOLDER) ? p.email : null, handle: p?.handle ?? null });
+    return c.json({ email: p && !p.email.endsWith(PLACEHOLDER) ? p.email : null, handle: p?.handle ?? null, digest: p ? await digestOn(c.env.DB, p.id) : false });
+  })
+  .put("/prefs", async (c) => {
+    if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
+    const b = (await c.req.json().catch(() => ({}))) as { tz?: unknown; digest?: unknown };
+    if ((b.tz !== undefined && !validTz(b.tz)) || (b.digest !== undefined && typeof b.digest !== "boolean")) return c.json({ error: "Check the timezone and digest setting." }, 400);
+    const p = await personOfUser(c.env.DB, c.get("owner").userId);
+    if (!p) return c.json({ error: "That account no longer exists." }, 404);
+    await setPrefs(c.env.DB, p.id, { tz: b.tz as string | undefined, digest: b.digest as boolean | undefined });
+    return c.json({ ok: true, digest: await digestOn(c.env.DB, p.id) });
   })
   .post("/email", async (c) => {
     if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
@@ -269,6 +279,17 @@ const app = new Hono<AppEnv>()
     return c.html(
       CheckerPage({ ...kept, rules: checkDraft(parsed.data.draft), model: result?.ok ? result.check : "unavailable" }),
     );
+  })
+  // GET only shows a button, so mail scanners that prefetch links cannot unsubscribe anyone.
+  // POST is RFC 8058 one-click: mail providers send it server to server, with no cookie or Origin, so no sameOrigin check.
+  .get("/u/:token", async (c) => {
+    c.header("cache-control", "private, no-store");
+    return c.html(UnsubscribePage({ token: c.req.param("token"), valid: await tokenValid(c.env.DB, c.req.param("token")) }));
+  })
+  .post("/u/:token", async (c) => {
+    c.header("cache-control", "private, no-store");
+    const ok = await unsubscribe(c.env.DB, c.req.param("token"));
+    return c.html(UnsubscribePage({ token: c.req.param("token"), valid: ok, done: ok }), ok ? 200 : 404);
   })
   .get("/signin", (c) => c.html(SigninPage({ siteKey: c.env.TURNSTILE_SITE_KEY })))
   .post("/signin", async (c) => {
@@ -410,6 +431,20 @@ export default {
   async queue(batch, env) {
     for (const message of batch.messages) {
       const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type"> & Partial<Pick<CloseJob, "later">>;
+      if (job.type === "digest") {
+        const d = message.body as DigestJob;
+        const origin = (env as Secrets).PUBLIC_ORIGIN;
+        try {
+          if (!origin) throw new Error("PUBLIC_ORIGIN missing");
+          const sent = await sendDigest(env as Secrets, { ...d, inbox: new URL("/app", origin).href, unsubscribe: new URL(`/u/${d.token}`, origin).href });
+          if (sent === "unconfigured") console.warn("digest not sent: RESEND_API_KEY or EMAIL_FROM missing");
+          message.ack();
+        } catch (e) {
+          console.error("digest failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 60 });
+        }
+        continue;
+      }
       if (job.type !== "receipt" && job.type !== "closure" && job.type !== "yes") {
         console.log("job", job.type);
         message.ack();
@@ -438,5 +473,7 @@ export default {
     await pruneLimits(env.DB);
     await pruneAuth(env.DB);
     await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
+    const digests = await digestJobs(env.DB);
+    for (let i = 0; i < digests.length; i += 100) await env.JOBS.sendBatch(digests.slice(i, i + 100).map((body) => ({ body })));
   },
 } satisfies ExportedHandler<Env>;

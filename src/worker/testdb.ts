@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 
 export const fakeDb = async () => {
   const sqlite = new Database(":memory:");
-  for (const f of ["0001_init", "0003_handles", "0004_code_hash", "0005_sessions", "0006_session_hardening"]) sqlite.run(await Bun.file(`migrations/${f}.sql`).text());
+  for (const f of ["0001_init", "0003_handles", "0004_code_hash", "0005_sessions", "0006_session_hardening", "0007_digest"]) sqlite.run(await Bun.file(`migrations/${f}.sql`).text());
   const stmt = (sql: string, args: unknown[] = []) => ({
     sql,
     bind: (...a: unknown[]) => stmt(sql, a),

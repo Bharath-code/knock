@@ -70,3 +70,22 @@ export const ConfirmPage = ({ token, error, link }: { token: string; error?: str
     )}
   </Shell>
 );
+
+export const UnsubscribePage = ({ token, valid, done }: { token: string; valid: boolean; done?: boolean }) => (
+  <Shell title="Daily digest | Doorbell" description="Turn off the daily digest." head={<meta name="robots" content="noindex, nofollow" />}>
+    <h1 class="text-3xl">{done ? "You're unsubscribed" : "Turn off the daily digest?"}</h1>
+    {!valid ? (
+      <p role="alert" class={`mt-6 ${alert}`}>This link is not valid. You can turn the digest off in your inbox settings.</p>
+    ) : done ? (
+      <p class="mt-3 text-lg text-muted-foreground">No more daily digests. Turn it back on any time in your inbox settings.</p>
+    ) : (
+      <>
+        <p class="mt-3 text-lg text-muted-foreground">You'll stop getting the once-a-day email about new knocks. Your door and inbox keep working.</p>
+        <form method="post" action={`/u/${token}`} class="mt-8">
+          <button class={button}>Turn off digest</button>
+        </form>
+      </>
+    )}
+    <a class={`mt-6 ${btn({ variant: "outline" })}`} href="/app/settings">Inbox settings</a>
+  </Shell>
+);

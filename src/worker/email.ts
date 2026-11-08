@@ -89,3 +89,30 @@ export const sendNewSignIn = async (env: MailEnv, r: NewSignIn, fetcher: typeof 
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
 };
+
+export type Digest = { to: string; fresh: number; open: number; top: { door: string; fit: number | null; excerpt: string }[]; inbox: string; unsubscribe: string };
+
+export const sendDigest = async (env: MailEnv, r: Digest, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const n = (k: number, one: string) => `${k} ${k === 1 ? one : `${one}s`}`;
+  const top = r.top.map((t) => `- ${t.door}, ${t.fit == null ? "not scored" : `fit ${t.fit}/5`}: ${stripLinks(t.excerpt)}`);
+  const text = [
+    `${n(r.fresh, "new knock")} since your last digest. ${n(r.open, "knock")} waiting in total.`,
+    top.length ? `Best fits:\n${top.join("\n")}` : null,
+    `Answer them: ${r.inbox}`,
+    `You get this at most once a day, only when there are new knocks.\nTurn it off: ${r.unsubscribe}`,
+  ].filter(Boolean).join("\n\n");
+  const res = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: r.to,
+      subject: `${n(r.fresh, "new knock")} on your door`,
+      text,
+      headers: { "List-Unsubscribe": `<${r.unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+    }),
+  });
+  if (!res.ok) throw new Error(`email provider ${res.status}`);
+  return "sent";
+};
