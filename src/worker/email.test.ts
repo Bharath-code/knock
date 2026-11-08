@@ -93,3 +93,17 @@ test("new-sign-in alert names the device and time and points to sign out everywh
   expect(b.text).toContain("Sign out everywhere");
   expect(await sendNewSignIn({}, { to: "a@x.com", device: "d", when: "w", link: "l" })).toBe("unconfigured");
 });
+
+test("sender emails end with the own-door link only when the public origin is set", async () => {
+  const seen: { body?: string } = {};
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>", PUBLIC_ORIGIN: "https://d.dev" };
+  const tail = "Get every request answered on your own posts: https://d.dev/go/door?from=email";
+  await sendReceipt(env, r, reply(200, seen));
+  expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
+  await sendYes(env, { to: "a@x.com", who: "Akash", url: null, note: null }, reply(200, seen));
+  expect(JSON.parse(seen.body!).text).toBe(`Akash said yes to your knock.\n\n—\n${tail}`);
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Not this time." }, reply(200, seen));
+  expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
+  await sendReceipt({ ...env, PUBLIC_ORIGIN: undefined }, r, reply(200, seen));
+  expect(JSON.parse(seen.body!).text).not.toContain("/go/door");
+});

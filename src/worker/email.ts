@@ -1,6 +1,9 @@
 export type Receipt = { to: string; link: string; who: string; days: number };
 export type Closure = { to: string; message: string; who: string; later?: boolean; expired?: boolean };
-export type MailEnv = { RESEND_API_KEY?: string; EMAIL_FROM?: string };
+export type MailEnv = { RESEND_API_KEY?: string; EMAIL_FROM?: string; PUBLIC_ORIGIN?: string };
+
+// Sender emails end with the own-door link; skipped when the public origin isn't configured.
+const ownDoor = (env: MailEnv) => (env.PUBLIC_ORIGIN ? `\n\n—\nGet every request answered on your own posts: ${new URL("/go/door?from=email", env.PUBLIC_ORIGIN).href}` : "");
 
 // ponytail: Resend over plain fetch; swap this one function for another provider
 export const sendReceipt = async (env: MailEnv, r: Receipt, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
@@ -12,7 +15,7 @@ export const sendReceipt = async (env: MailEnv, r: Receipt, fetcher: typeof fetc
       from: env.EMAIL_FROM,
       to: r.to,
       subject: `Your knock reached ${r.who}`,
-      text: `Your knock was delivered to ${r.who}.\n\nThey have promised an answer within ${r.days} days. Follow it here:\n${r.link}\n\nKeep this link private. Anyone with it can see the status.`,
+      text: `Your knock was delivered to ${r.who}.\n\nThey have promised an answer within ${r.days} days. Follow it here:\n${r.link}\n\nKeep this link private. Anyone with it can see the status.${ownDoor(env)}`,
     }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
@@ -25,7 +28,7 @@ export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetc
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)` }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: (r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)`) + ownDoor(env) }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
@@ -47,7 +50,7 @@ export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fe
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: `${r.who} said yes`, text: parts.join("\n\n") }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: `${r.who} said yes`, text: parts.join("\n\n") + ownDoor(env) }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
