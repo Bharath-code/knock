@@ -62,3 +62,10 @@ test("closure email uses the kind message, a distinct subject for Not now, and s
   await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Later", later: true }, reply(200, seen));
   expect(JSON.parse(seen.body!).subject).toBe("Akash replied to your knock");
 });
+
+test("expired closure email has its own subject and no 'answered' footer", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  const seen: { body?: string } = {};
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Akash didn't get to your knock.", expired: true }, reply(200, seen));
+  expect(JSON.parse(seen.body!)).toMatchObject({ subject: "Akash didn't get to your knock", text: "Akash didn't get to your knock." });
+});

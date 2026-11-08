@@ -4,6 +4,7 @@ import { keyAction, NOTE_MAX, safeProof, sortCards, swipeAnswer, type InboxCard 
 import { bookingUrl } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { parseCodes } from "../shared/codes";
+import { closeExpired, nextExpiry } from "./expire";
 import { closeJob, knockTemplate, stillAnswered } from "./closure";
 import { getBooking, setBooking, stillYes, yesJob } from "./booking";
 import { addCodes, codeFor, decryptCode, encryptCode, pools, yesCode } from "./codes";
@@ -13,6 +14,7 @@ const fakeDb = async () => {
   const sqlite = new Database(":memory:");
   for (const f of ["0001_init", "0003_handles", "0004_code_hash"]) sqlite.run(await Bun.file(`migrations/${f}.sql`).text());
   const stmt = (sql: string, args: unknown[] = []) => ({
+    sql,
     bind: (...a: unknown[]) => stmt(sql, a),
     all: async () => ({ results: sqlite.query(sql).all(...(args as never[])) }),
     first: async () => sqlite.query(sql).get(...(args as never[])),
@@ -22,7 +24,11 @@ const fakeDb = async () => {
     sqlite,
     db: {
       prepare: (sql: string) => stmt(sql),
-      batch: async (list: { run: () => Promise<unknown> }[]) => { const out = []; for (const s of list) out.push(await s.run()); return out; },
+      batch: async (list: { sql: string; run: () => Promise<unknown>; all: () => Promise<object> }[]) => {
+        const out = [];
+        for (const s of list) out.push(/^\s*SELECT/i.test(s.sql) ? { ...(await s.all()), meta: { changes: 0 } } : await s.run());
+        return out;
+      },
     } as unknown as D1Database,
   };
 };
@@ -208,4 +214,45 @@ test("a closure job carries the stored message and is skipped after undo; only t
   expect(await stillAnswered(db, "high", now)).toBe(true);
   await undoKnock(db, owner, "high", now + 1_000);
   expect(await stillAnswered(db, "high", now)).toBe(false);
+});
+
+test("expiry closes only open knocks past their window, counts them as unanswered, and runs once", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  sqlite.run("UPDATE people SET handle = 'akash', display_name = 'Akash' WHERE id = 'p'");
+  sqlite.run(`UPDATE knocks SET expires_at = ${now - 1} WHERE id IN ('low', 'none')`);
+  await answerKnock(db, owner, "high", { answer: "yes" }, now - 10_000);
+  sqlite.run(`UPDATE knocks SET expires_at = ${now - 1} WHERE id = 'high'`);
+  expect(await nextExpiry(db, "d")).toBe(now - 1);
+  const closed = await closeExpired(db, "d", now);
+  expect(closed.map((c) => c.to).sort()).toEqual(["a@x", "b@x"]);
+  expect(closed.every((c) => c.who === "Akash")).toBe(true);
+  expect(sqlite.query("SELECT id, status FROM knocks ORDER BY id").all()).toEqual([
+    { id: "high", status: "answered" }, { id: "low", status: "expired" }, { id: "none", status: "expired" },
+  ]);
+  expect(sqlite.query("SELECT answer, note, actor_user_id a FROM decisions WHERE answer = 'expired'").all()).toEqual([
+    { answer: "expired", note: "They didn't get to it", a: null }, { answer: "expired", note: "They didn't get to it", a: null },
+  ]);
+  expect(sqlite.query("SELECT answered_in_window n FROM door_stats").get()).toEqual({ n: 1 });
+  expect(await closeExpired(db, "d", now)).toEqual([]);
+  expect(await nextExpiry(db, "d")).toBeNull();
+  expect(await listInbox(db, owner, now)).toEqual([]);
+});
+
+test("expiry is scoped to its door, a sweep covers every door, and an answer in time wins", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  sqlite.run(`INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('e','o','u','other','post','beta','[]',2)`);
+  sqlite.run(`UPDATE knocks SET door_id = 'e' WHERE id = 'none'`);
+  sqlite.run(`UPDATE knocks SET expires_at = ${now - 1}`);
+  expect((await closeExpired(db, "e", now)).length).toBe(1);
+  expect(sqlite.query("SELECT status FROM knocks WHERE id = 'low'").get()).toEqual({ status: "new" });
+  expect(await answerKnock(db, owner, "low", { answer: "yes" }, now)).toBe(false);
+  expect((await closeExpired(db, null, now)).length).toBe(2);
+  expect(sqlite.query("SELECT COUNT(*) n FROM knocks WHERE status = 'expired'").get()).toEqual({ n: 3 });
+  sqlite.run(`INSERT INTO knocks (id,org_id,door_id,person_id,answers_json,token_hash,consent_at,source,created_at,expires_at) VALUES ('late','o','d','p','{}','tl',1,'bio',1,${now + 5_000})`);
+  expect(await answerKnock(db, owner, "late", { answer: "no" }, now)).toBe(true);
+  expect(await closeExpired(db, null, now + 10_000)).toEqual([]);
 });

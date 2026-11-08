@@ -32,5 +32,5 @@ export const ANSWER_LABEL: Record<string, string> = {
   later: "Not now",
   no: "No, thank you",
   pass: "Passed to a better door",
-  expired: "Closed without an answer",
+  expired: "They didn't get to it",
 };
