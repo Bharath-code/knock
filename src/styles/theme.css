@@ -87,18 +87,47 @@
   --font-mono: "JetBrains Mono Variable", ui-monospace, Menlo, monospace;
 
   --radius-*: initial;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
 
   --shadow-*: initial;
   --shadow-e-1: var(--e-1);
   --shadow-e-2: var(--e-2);
 
+  --color-line-strong: var(--line-strong);
+  --color-brass-hover: var(--brass-hover);
+  --color-no-soft: var(--no-soft);
+  --color-yes-soft: var(--yes-soft);
+  --color-later-soft: var(--later-soft);
+
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.35rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.65rem;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.8rem;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 2.1rem;
+  --text-3xl: clamp(2rem, 1.4rem + 2.6vw, 2.875rem);
+  --text-3xl--line-height: 1.08;
+
   --ease-*: initial;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  --line-strong: color-mix(in oklab, var(--line) 60%, var(--muted));
+  --brass-hover: color-mix(in oklab, var(--brass) 86%, var(--ink));
+  --no-soft: color-mix(in oklab, var(--no) 12%, var(--card));
+  --yes-soft: color-mix(in oklab, var(--yes) 12%, var(--card));
+  --later-soft: color-mix(in oklab, var(--later) 12%, var(--card));
 }
 
 @layer base {
@@ -106,21 +135,75 @@
     background: var(--paper);
     color: var(--ink);
     font-family: var(--font-body);
-    font-size: 16.5px;
+    font-size: 16px;
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--line-strong) transparent;
+    accent-color: var(--brass);
+    caret-color: var(--brass);
+  }
+  ::selection {
+    background: var(--brass-soft);
+    color: var(--ink);
   }
   h1,
   h2,
   h3 {
     font-family: var(--font-display);
-    line-height: 1.12;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
     text-wrap: balance;
   }
   a {
-    color: var(--brass);
+    color: var(--brass-ink);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    transition: color var(--d-fast) var(--ease-out);
+  }
+  a:hover {
+    color: var(--ink);
+  }
+  time,
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
   :focus-visible {
     outline: 2px solid var(--brass);
-    outline-offset: 3px;
+    outline-offset: 2px;
+  }
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1;
+    padding: 0.2rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    opacity: 0.6;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@layer utilities {
+  .animate-rise {
+    animation: rise var(--d-base) var(--ease-out);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise {
+      animation: fade var(--d-fast) linear;
+    }
   }
 }
