@@ -21,7 +21,18 @@ Per task: build and test locally, then deploy to staging, run the staging smoke 
 - Live `EMAIL_FROM` must be an address on a domain verified in Resend. Staging uses `onboarding@resend.dev`, which only delivers to the Resend account owner and `resend.dev` sinks, so real senders get no receipt or closure email until the domain is verified.
 - Spend limit on the live Anthropic key and a global daily budget on the model route (see the DEM-55 comment).
 - Live Turnstile widget lists the live hostname.
+- `PUBLIC_ORIGIN` in `wrangler.jsonc` is the live URL. The cron uses it to build the daily digest's inbox and unsubscribe links, because cron runs have no request URL. Update it if the live domain changes. Staging has no cron, so the digest only runs on live.
 - `bun run deploy:live`, then smoke and Lighthouse against live.
+
+## UI
+
+- Two renderers: `/app` is React (`src/app/main.tsx`). Every other page is server-rendered `hono/jsx` through `Shell` in `src/worker/door-pages.tsx`, with no React runtime. Public pages must work without JS. Home ships zero `<script>`, and smoke checks this. Pass `copy` to `Shell` only on pages with a Copy button.
+- shadcn is set up (`components.json`, `@/` → `src/`). Add components with `bunx shadcn@latest add <name>`. They land in `src/app/ui/` and import `cn` from shadcn's `cn` package. Use them in `/app` only.
+- `src/shared/ui.ts` holds the shared recipes: `buttonVariants` (shadcn variant names, plus `destructive-outline`), `input`, `label`, `card`, `alert`, `notice`. shadcn's `Button` imports from it, and hono pages call `button({ variant, size })`. Never hand-copy button or input classes.
+- Colours are shadcn tokens in `src/styles/theme.css`, in oklch: warm neutral greys with brass as `primary`, and no blue. Light and dark come from `prefers-color-scheme` or `data-theme`; the `dark:` variant follows both. Old names (`paper`, `ink`, `brass`, `line`, `sunk`, `no`) are aliases. For grey text use `text-muted-foreground`, because `muted` is a background.
+- Type scale is `text-xs`…`text-3xl` only, with no pixel sizes. Headings are display font at weight 600. Buttons are 44px tall on touch screens (`h-11 sm:h-9`).
+- Every control needs hover, focus-visible, disabled and loading states. Keyboard shortcuts in `/app` must ignore inputs and `[role=dialog], [role=alertdialog]`.
+- After UI edits, run `~/.claude/skills/impeccable/scripts/impeccable detect --json <files>`. Check light and dark at 375px and 1280px, with no horizontal scroll.
 
 ## Conventions
 

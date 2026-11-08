@@ -19,6 +19,7 @@ import { NativeSelect, NativeSelectOption } from "./ui/native-select";
 import { Skeleton } from "./ui/skeleton";
 import { Toaster } from "./ui/sonner";
 import { Spinner } from "./ui/spinner";
+import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
 import "../styles/theme.css";
 
@@ -111,7 +112,7 @@ const App = () => {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [booking, setBooking] = useState("");
-  const [account, setAccount] = useState<{ email: string | null; handle: string | null } | null>(null);
+  const [account, setAccount] = useState<{ email: string | null; handle: string | null; digest: boolean } | null>(null);
   const [emailIn, setEmailIn] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
   const [poolDoor, setPoolDoor] = useState("");
@@ -150,7 +151,16 @@ const App = () => {
 
   useEffect(() => {
     api.inbox.account.$get().then(async (r) => r.ok && setAccount(await r.json())).catch(() => {});
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) api.inbox.prefs.$put({ json: { tz } }).catch(() => {});
   }, []);
+
+  const setDigest = (on: boolean) => run("digest", async () => {
+    const r = await api.inbox.prefs.$put({ json: { digest: on } }).catch(() => null);
+    if (!r?.ok) return fail("Couldn't save your digest setting.");
+    setAccount((a) => a && { ...a, digest: on });
+    toast.success(on ? "Daily digest on. It arrives around 8:00 your time on days with new knocks." : "Daily digest off.");
+  });
 
   const signOut = (all: boolean) => run(all ? "out-all" : "out", async () => {
     const r = await api.inbox.signout.$post({ json: { all } }).catch(() => null);
@@ -488,6 +498,13 @@ const App = () => {
                       <Button variant="destructive-outline" disabled={busy === "out-all"} onClick={() => void signOut(true)}><Busy k="out-all" />Sign out everywhere</Button>
                     </div>
                     <p className="text-sm text-muted-foreground">Everywhere signs out every device, including older links from before you added an email.</p>
+                    <div className="flex items-start justify-between gap-4 border-t pt-4">
+                      <div>
+                        <Label htmlFor="digest">Daily digest</Label>
+                        <p className="mt-1 text-sm text-muted-foreground">One email around 8:00 your time, only on days with new knocks.</p>
+                      </div>
+                      <Switch id="digest" className="mt-1" checked={account.digest} disabled={busy === "digest"} onCheckedChange={(v) => void setDigest(v)} />
+                    </div>
                   </>
                 ) : (
                   <>
