@@ -322,7 +322,9 @@ const app = new Hono<AppEnv>()
   })
   .get("/signin/confirm", async (c) => {
     c.header("cache-control", "no-store");
-    c.header("referrer-policy", "no-referrer");
+    // same-origin, not no-referrer: no-referrer makes browsers send Origin: null on this page's own form POST,
+    // which fails the sameOrigin check. The token still never leaves the site in a Referer.
+    c.header("referrer-policy", "same-origin");
     const token = c.req.query("t") ?? "";
     const link = token ? await peekLink(c.env.DB, token) : null;
     if (!link) return c.html(ConfirmPage({ token: "", error: "This link has expired or was already used. Ask for a new one." }), 400);
