@@ -2,6 +2,7 @@
 import type { Child } from "hono/jsx";
 import css from "../styles/theme.css?url";
 import { alert, button as btn, card, hint, input, label } from "../shared/ui";
+import { RETAIN_DAYS } from "./retention";
 import { answerRate, defaultFields, replyLine, templates, WINDOWS, type Template } from "../shared/door";
 import type { DoorView, Owner } from "./doors";
 import { KnockFormView, StatusBody, type KnockForm } from "./knock-pages";
@@ -39,7 +40,10 @@ export const Shell = ({ title, description, head, wide, copy, children }: { titl
       </header>
       <main class={`mx-auto w-full px-4 py-10 sm:px-6 sm:py-14 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
       <footer class="mt-auto border-t border-line">
-        <p class="mx-auto max-w-5xl px-4 py-6 text-sm text-muted-foreground sm:px-6">Doorbell. Every knock gets an answer.</p>
+        <p class="mx-auto flex max-w-5xl flex-wrap justify-between gap-2 px-4 py-6 text-sm text-muted-foreground sm:px-6">
+          <span>Doorbell. Every knock gets an answer.</span>
+          <a href="/privacy" class="text-muted-foreground hover:text-foreground">Privacy</a>
+        </p>
       </footer>
       {copy && <script dangerouslySetInnerHTML={{ __html: copyScript }} />}
     </body>
@@ -207,8 +211,70 @@ export const NotFoundDoor = () => (
   </Shell>
 );
 
-export const StatusPage = ({ s, link }: { s: Status; link: string }) => (
+export const StatusPage = ({ s, link, token }: { s: Status; link: string; token: string }) => (
   <Shell title="Your knock | Doorbell" description="Status of your knock." head={<meta name="robots" content="noindex, nofollow" />}>
     <StatusBody s={s} link={link} />
+    <details class="group mt-10 border-t pt-6">
+      <summary class="cursor-pointer text-sm text-muted-foreground transition-colors hover:text-foreground">Delete my knock</summary>
+      <div class={`mt-4 p-5 ${card}`}>
+        <p class="text-sm">This permanently deletes your message, your answers and your email from this knock. {s.answer ? "" : `${s.who} will no longer see it. `}It can't be undone.</p>
+        <form method="post" action={`/k/${token}/delete`} class="mt-4">
+          <button class={btn({ variant: "destructive" })}>Delete permanently</button>
+        </form>
+      </div>
+    </details>
+    <p class="mt-4 text-sm text-muted-foreground">Otherwise it is deleted automatically {RETAIN_DAYS} days after it closes. <a href="/privacy">Privacy</a></p>
+  </Shell>
+);
+
+export const DeletedPage = () => (
+  <Shell title="Knock deleted | Doorbell" description="Your knock was deleted." head={<meta name="robots" content="noindex, nofollow" />}>
+    <h1 class="text-3xl">Your knock is deleted</h1>
+    <p class="mt-3 text-lg text-muted-foreground">Your message, answers and email are gone from Doorbell. The status link no longer works.</p>
+  </Shell>
+);
+
+const PROCESSORS = [
+  ["Cloudflare", "Runs the site and stores its data (Workers, D1, Durable Objects, Queues, R2), and checks that visitors are human (Turnstile)."],
+  ["Anthropic", "Scores how well a knock fits the post and suggests a tighter version of a draft, through the Claude API."],
+  ["Resend", "Sends Doorbell's emails: receipts, answers, sign-in links and the daily digest."],
+] as const;
+
+export const PrivacyPage = () => (
+  <Shell title="Privacy | Doorbell" description="What Doorbell stores, for how long, and who processes it.">
+    <h1 class="text-3xl">Privacy</h1>
+    <p class="mt-3 text-lg text-muted-foreground">What Doorbell stores, how long it keeps it, and who processes it.</p>
+
+    <section class="mt-10 space-y-3">
+      <h2 class="text-xl">What we store</h2>
+      <ul class="list-disc space-y-2 pl-5 text-muted-foreground">
+        <li><span class="text-foreground">If you knock:</span> your email, your answers, your message, any proof link you add, and when you agreed to send it.</li>
+        <li><span class="text-foreground">If you make a door:</span> your handle, your name if you give one, the post you paste, your email if you add one, and the answers you send.</li>
+        <li><span class="text-foreground">To stop abuse:</span> your IP address, used as a rate-limit key and removed after about a day.</li>
+      </ul>
+      <p class="text-sm text-muted-foreground">Status links, sign-in links and sessions are stored only as hashes.</p>
+    </section>
+
+    <section class="mt-10 space-y-3">
+      <h2 class="text-xl">How long we keep it</h2>
+      <ul class="list-disc space-y-2 pl-5 text-muted-foreground">
+        <li>A knock is deleted {RETAIN_DAYS} days after it is answered or its window ends, with its answers and your email if you have no other knock.</li>
+        <li>You can delete your knock sooner from its status link.</li>
+        <li>Sign-in links expire after 15 minutes. Sessions end after 7 days without use, and after 30 days at most.</li>
+      </ul>
+    </section>
+
+    <section class="mt-10" aria-labelledby="processors">
+      <h2 id="processors" class="text-xl">Sub-processors</h2>
+      <p class="mt-3 text-muted-foreground">These companies process data on Doorbell's behalf.</p>
+      <dl class={`mt-4 divide-y ${card}`}>
+        {PROCESSORS.map(([name, what]) => (
+          <div class="grid gap-1 px-5 py-4 sm:grid-cols-[9rem_1fr] sm:gap-4">
+            <dt class="font-medium">{name}</dt>
+            <dd class="text-muted-foreground">{what}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   </Shell>
 );
