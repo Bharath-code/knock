@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { hc } from "hono/client";
-import { CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, Settings as SettingsIcon } from "lucide-react";
+import { CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, LogOut, Settings as SettingsIcon } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
@@ -482,6 +482,11 @@ const App = () => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          )}
+          {account?.email && (
+            <Button variant="ghost" className={!settings && open > 0 ? "" : "ml-auto"} disabled={busy === "out"} onClick={() => void signOut(false)} aria-label="Sign out">
+              <LogOut className="size-4" aria-hidden /><span className="max-sm:sr-only">Sign out</span>
+            </Button>
           )}
         </div>
       </header>

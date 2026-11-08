@@ -33,6 +33,9 @@ const exampleHtml = await example.text();
 assert("example door and knock", example.ok && exampleHtml.includes("Sample knock") && exampleHtml.includes("Make your own door"));
 assert("make-a-door links to the example", (await (await fetch(`${base}/new`)).text()).includes('href="/example"'));
 
+const newPage = await fetch(`${base}/new`);
+assert("make-a-door starts the first-door timer", /\bnt=\d+/.test(newPage.headers.get("set-cookie") ?? ""));
+
 const css = /<link rel="stylesheet" href="([^"]+)"/.exec(homeHtml)?.[1];
 const stylesheet = await fetch(`${base}${css}`, { headers: { accept: "text/css" } });
 assert("public stylesheet", stylesheet.ok && (await stylesheet.text()).includes("--brand-ink"));

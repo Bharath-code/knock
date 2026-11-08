@@ -15,7 +15,18 @@ const DAY = 86_400_000;
 export const WEEK = 7 * DAY;
 export const PERIOD = 14 * DAY;
 
+export const FIRST_DOOR_GOAL_SECS = 60;
+export type FirstDoor = { n: number; fast: number; median: number | null };
+
+// The PRD asks for under 60 s for 4 of the last 5 new receivers, so only the 5 most recent count.
+export const firstDoorStats = (secs: number[]): FirstDoor => {
+  const s = [...secs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return { n: s.length, fast: s.filter((x) => x < FIRST_DOOR_GOAL_SECS).length, median: s.length ? (s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2) : null };
+};
+
 export type D1Metrics = {
+  firstDoor: FirstDoor;
   northStar: number;
   receivers: number;
   answerRate: number | null;
@@ -26,17 +37,19 @@ export type D1Metrics = {
 
 // Truth comes from D1, not events: undo deletes the decision row, so nothing double-counts.
 export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Metrics> => {
-  const [ns, rec, closed, k, out] = await db.batch([
+  const [ns, rec, closed, k, out, fd] = await db.batch([
     db.prepare("SELECT COUNT(*) n FROM decisions WHERE answer IN ('yes','later','no') AND at >= ?1").bind(now - WEEK),
     db.prepare("SELECT COUNT(DISTINCT owner_user_id) n FROM doors"),
     db.prepare("SELECT COUNT(*) total, COALESCE(SUM(answer <> 'expired'), 0) answered FROM decisions WHERE answer IN ('yes','later','no','expired') AND at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT COUNT(*) knocks, COUNT(DISTINCT door_id) doors FROM knocks WHERE created_at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT COUNT(*) n FROM outcomes WHERE at >= ?1").bind(now - PERIOD),
+    db.prepare("SELECT first_door_secs s FROM doors WHERE first_door_secs IS NOT NULL ORDER BY created_at DESC LIMIT 5"),
   ]);
   const one = <T,>(r: unknown) => ((r as D1Result<T>).results[0] ?? {}) as T;
   const c = one<{ total: number; answered: number }>(closed);
   const kk = one<{ knocks: number; doors: number }>(k);
   return {
+    firstDoor: firstDoorStats(((fd as D1Result<{ s: number }>).results ?? []).map((r) => r.s)),
     northStar: one<{ n: number }>(ns).n ?? 0,
     receivers: one<{ n: number }>(rec).n ?? 0,
     answerRate: c.total ? c.answered / c.total : null,

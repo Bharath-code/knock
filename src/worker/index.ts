@@ -362,9 +362,11 @@ const app = new Hono<AppEnv>()
     if (from) track(c.env.FUNNEL, "own_door_click", from, t ?? "");
     return c.redirect(`/new${from ? `?ref=${from}${t ? `&t=${t}` : ""}` : ""}`, 302);
   })
-  .get("/new", async (c) =>
-    c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY, ref: asRef(c.req.query("ref")), starter: asTemplate(c.req.query("t")) })),
-  )
+  .get("/new", async (c) => {
+    // Starts the first-door timer; the POST reads it and clears it.
+    if (!getCookie(c, "nt")) setCookie(c, "nt", String(Date.now()), { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/new", maxAge: 3600 });
+    return c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY, ref: asRef(c.req.query("ref")), starter: asTemplate(c.req.query("t")) }));
+  })
   .post("/new", async (c) => {
     const form = await c.req.parseBody({ all: true });
     const one = (k: string) => (typeof form[k] === "string" ? (form[k] as string) : "");
@@ -398,8 +400,10 @@ const app = new Hono<AppEnv>()
       const again = mode === "claim" ? {} : { template: parsed.data.template, fields: parsed.data.fields, window: parsed.data.window };
       return c.html(NewDoorPage({ ...base, ...again, error: gateMessage[g] }), g === "limited" ? 429 : g === "captcha" ? 403 : 503);
     }
-    const made = await createDoor(c.env.DB, parsed.data, token);
+    const startedAt = Number(getCookie(c, "nt"));
+    const made = await createDoor(c.env.DB, parsed.data, token, Number.isFinite(startedAt) && startedAt > 0 ? startedAt : undefined);
     if (!made.ok) return bad(made.error);
+    deleteCookie(c, "nt", { path: "/new" });
     if (ref) track(c.env.FUNNEL, "own_door_created", ref, parsed.data.template);
     if (made.token) setCookie(c, "ds", made.token, { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/", maxAge: 31_536_000 });
     return c.redirect(made.slug === PROFILE_SLUG ? `/d/${made.handle}?made=1` : `/d/${made.handle}/${made.slug}?made=1`, 303);

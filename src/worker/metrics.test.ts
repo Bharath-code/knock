@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { fakeDb } from "./testdb";
 import { answerKnock, markSeen, undoKnock } from "./inbox";
 import { closeExpired } from "./expire";
-import { d1Metrics, isAdmin, isBot, verdict, viewSource } from "./metrics";
+import { d1Metrics, firstDoorStats, isAdmin, isBot, verdict, viewSource } from "./metrics";
+import { createDoor } from "./doors";
 
 const owner = { userId: "u", orgId: "o" };
 
@@ -41,4 +42,27 @@ test("helpers: bots, sources, admin list, verdicts", () => {
   expect(isAdmin("me@x.com", undefined)).toBe(false);
   expect(isAdmin("someone@x.com", "me@x.com")).toBe(false);
   expect([verdict(2, 10, 3), verdict(5, 10, 3), verdict(10, 10, 3), verdict(null, 1)]).toEqual(["kill", "below", "met", "none"]);
+});
+
+
+test("first-door stats: 4 of 5 under 60 s, median, and empty", () => {
+  expect(firstDoorStats([20, 30, 45, 59, 90])).toEqual({ n: 5, fast: 4, median: 45 });
+  expect(firstDoorStats([60, 10])).toEqual({ n: 2, fast: 1, median: 35 });
+  expect(firstDoorStats([])).toEqual({ n: 0, fast: 0, median: null });
+});
+
+test("only an owner's first door is timed, and absurd times are dropped", async () => {
+  const { db, sqlite } = await fakeDb();
+  const input = { handle: "timed", name: "", post: "Hiring a backend engineer in Pune", template: "referral" as const, fields: ["Role"], window: 7 as const };
+  const now = Date.now();
+  const first = await createDoor(db, input, undefined, now - 42_000);
+  expect(first.ok).toBe(true);
+  const secs = sqlite.query("SELECT first_door_secs s FROM doors WHERE slug = 'profile'").get() as { s: number } | null;
+  expect(secs!.s).toBeGreaterThanOrEqual(41);
+  expect(secs!.s).toBeLessThanOrEqual(43);
+  const token = first.ok ? first.token : undefined;
+  await createDoor(db, { ...input, post: "Second post about a gig" }, token, now - 5_000);
+  expect((sqlite.query("SELECT COUNT(*) n FROM doors WHERE first_door_secs IS NOT NULL").get() as { n: number }).n).toBe(1);
+  await createDoor(db, { ...input, handle: "slow", post: "" }, undefined, now - 7_200_000);
+  expect((sqlite.query("SELECT COUNT(*) n FROM doors WHERE first_door_secs IS NOT NULL").get() as { n: number }).n).toBe(1);
 });
