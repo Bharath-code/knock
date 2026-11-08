@@ -24,6 +24,10 @@ assert("react shell", app.ok && (await app.text()).includes('id="root"'));
 assert("unknown path is a 404", (await fetch(`${base}/no-such-page`)).status === 404);
 assert("metrics page is hidden without an admin session", (await fetch(`${base}/admin/metrics`)).status === 404);
 
+assert("feedback page", (await fetch(`${base}/feedback`)).ok);
+assert("feedback log is hidden without an admin session", (await fetch(`${base}/admin/feedback`)).status === 404);
+assert("home links to Talk to Bharath", homeHtml.includes('href="/feedback"'));
+
 const css = /<link rel="stylesheet" href="([^"]+)"/.exec(homeHtml)?.[1];
 const stylesheet = await fetch(`${base}${css}`, { headers: { accept: "text/css" } });
 assert("public stylesheet", stylesheet.ok && (await stylesheet.text()).includes("--brand-ink"));

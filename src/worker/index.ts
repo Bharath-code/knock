@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { validator } from "hono/validator";
 import { z } from "zod";
@@ -24,6 +24,8 @@ import { addCodes, codeFor, pools, yesCode } from "./codes";
 import { getBooking, setBooking, stillYes, yesJob, type YesJob } from "./booking";
 import { getStatus } from "./knocks";
 import { asSource, emailKey, knockSchema } from "../shared/knock";
+import { cleanPage, feedbackSchema, listFeedback, markReviewed, saveFeedback } from "./feedback";
+import { FeedbackAdminPage, FeedbackPage } from "./feedback-page";
 import { answeredPng, ogPng, rewritePng, scorePng } from "./og";
 import { createDoor, getDoor, ownerFromToken, sha256 } from "./doors";
 import { gate, ipKey, pruneLimits, withinLimit } from "./gate";
@@ -78,6 +80,12 @@ const gateMessage = {
   limited: "That's 20 tries this hour from your network. Try again a bit later.",
   unconfigured: "Checks aren't set up yet.",
 } as const;
+
+const isAdminRequest = async (c: Context<{ Bindings: Secrets }>) => {
+  const o = await ownerUser(c.env.DB, getCookie(c, "ds"));
+  const p = o && (await personOfUser(c.env.DB, o.userId));
+  return !!p && isAdmin(p.email, c.env.ADMIN_EMAILS);
+};
 
 const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
   .use(async (c, next) => {
@@ -452,12 +460,37 @@ const app = new Hono<AppEnv>()
   })
   .get("/privacy", (c) => c.html(PrivacyPage()))
   // Private: only ADMIN_EMAILS see it; everyone else gets the same 404 as a missing page.
+  .get("/feedback", (c) => c.html(FeedbackPage({ siteKey: c.env.TURNSTILE_SITE_KEY, page: cleanPage(c.req.query("from") ?? "") })))
+  .post("/feedback", async (c) => {
+    const form = await c.req.parseBody();
+    const text = (k: string) => (typeof form[k] === "string" ? (form[k] as string) : "");
+    const kept = { siteKey: c.env.TURNSTILE_SITE_KEY, page: cleanPage(text("page")), body: text("body").slice(0, 2000), contact: text("contact").slice(0, 200), tag: text("tag") };
+    const parsed = feedbackSchema.safeParse({ tag: text("tag"), body: text("body"), contact: text("contact"), page: text("page") });
+    if (!parsed.success) return c.html(FeedbackPage({ ...kept, error: "Pick what it is and write a message, up to 2,000 characters." }), 400);
+    if (parsed.data.contact && !z.string().email().safeParse(parsed.data.contact).success) return c.html(FeedbackPage({ ...kept, error: "That email doesn't look right. Leave it blank to skip." }), 400);
+    const g = await gate(c.env, clientIp(c.req.raw), text("cf-turnstile-response"), "feedback");
+    if (g !== "ok") return c.html(FeedbackPage({ ...kept, error: gateMessage[g] }), g === "limited" ? 429 : g === "captcha" ? 403 : 503);
+    const o = await ownerUser(c.env.DB, getCookie(c, "ds"));
+    const p = o && (await personOfUser(c.env.DB, o.userId));
+    await saveFeedback(c.env.DB, parsed.data, p ? p.id : null);
+    c.header("cache-control", "private, no-store");
+    return c.html(FeedbackPage({ sent: true }));
+  })
+  .get("/admin/feedback", async (c) => {
+    c.header("cache-control", "private, no-store");
+    c.header("x-robots-tag", "noindex, nofollow");
+    if (!(await isAdminRequest(c))) return c.html(NotFoundDoor(), 404);
+    return c.html(FeedbackAdminPage({ rows: await listFeedback(c.env.DB), cleared: c.req.query("cleared") === undefined ? undefined : Number(c.req.query("cleared")) || 0 }));
+  })
+  .post("/admin/feedback", async (c) => {
+    c.header("cache-control", "private, no-store");
+    if (!sameOrigin(c.req.raw) || !(await isAdminRequest(c))) return c.html(NotFoundDoor(), 404);
+    return c.redirect(`/admin/feedback?cleared=${await markReviewed(c.env.DB)}`, 303);
+  })
   .get("/admin/metrics", async (c) => {
     c.header("cache-control", "private, no-store");
     c.header("x-robots-tag", "noindex, nofollow");
-    const o = await ownerUser(c.env.DB, getCookie(c, "ds"));
-    const p = o && (await personOfUser(c.env.DB, o.userId));
-    if (!p || !isAdmin(p.email, c.env.ADMIN_EMAILS)) return c.html(NotFoundDoor(), 404);
+    if (!(await isAdminRequest(c))) return c.html(NotFoundDoor(), 404);
     const [d1, events] = await Promise.all([d1Metrics(c.env.DB), eventCounts(c.env.ANALYTICS_SQL, c.env.FUNNEL_DATASET)]);
     return c.html(MetricsPage({ d1, events }));
   })

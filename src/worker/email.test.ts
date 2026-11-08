@@ -101,7 +101,7 @@ test("sender emails end with the own-door link only when the public origin is se
   await sendReceipt(env, r, reply(200, seen));
   expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
   await sendYes(env, { to: "a@x.com", who: "Akash", url: null, note: null }, reply(200, seen));
-  expect(JSON.parse(seen.body!).text).toBe(`Akash said yes to your knock.\n\n—\n${tail}`);
+  expect(JSON.parse(seen.body!).text).toBe(`Akash said yes to your knock.\n\nQuestion or problem? Talk to Bharath, I reply within 24 hours: https://d.dev/feedback?from=email\n\n—\n${tail}`);
   await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Not this time." }, reply(200, seen));
   expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
   await sendReceipt({ ...env, PUBLIC_ORIGIN: undefined }, r, reply(200, seen));
