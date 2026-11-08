@@ -45,11 +45,19 @@ const attach = async (db: D1Database, link: Link & { person_id: string }): Promi
   if (!p) return "That account no longer exists.";
   if (!p.email.endsWith(PLACEHOLDER)) return p.email_hash === link.email_hash ? null : "This account already has an email.";
   const other = await db
-    .prepare("SELECT p.id, EXISTS (SELECT 1 FROM users u WHERE u.person_id = p.id) AS has_user FROM people p WHERE p.email_hash = ?1")
+    .prepare("SELECT p.id, p.email, EXISTS (SELECT 1 FROM users u WHERE u.person_id = p.id) AS has_user FROM people p WHERE p.email_hash = ?1")
     .bind(link.email_hash)
-    .first<{ id: string; has_user: number }>();
+    .first<{ id: string; email: string; has_user: number }>();
   if (other && other.id !== link.person_id) {
-    return other.has_user ? "That email already has an account. Sign in with it instead." : "That email has knocked on a door before and can't be attached yet. Use a different email.";
+    if (other.has_user) return "That email already has an account. Sign in with it instead.";
+    // Only the exact address merges: a and a+x share a hash but can be different mailboxes (see personFor).
+    if (normalizeEmail(other.email) !== link.email) return "That email has knocked on a door before and can't be attached yet. Use a different email.";
+    try {
+      await mergeSender(db, other.id, link.person_id, link.email, link.email_hash);
+    } catch {
+      return "That email is already in use.";
+    }
+    return null;
   }
   try {
     await db.prepare("UPDATE people SET email = ?1, email_hash = ?2 WHERE id = ?3").bind(link.email, link.email_hash, link.person_id).run();
@@ -57,6 +65,24 @@ const attach = async (db: D1Database, link: Link & { person_id: string }): Promi
     return "That email is already in use.";
   }
   return null;
+};
+
+// The confirmed link proves the owner holds this address, so the sender record that knocked from it becomes theirs.
+// Order matters: knocks cascade on delete, so everything moves to the owner before the sender row goes.
+const mergeSender = async (db: D1Database, from: string, to: string, email: string, emailHash: string) => {
+  await db.batch([
+    db.prepare("UPDATE knocks SET person_id = ?2 WHERE person_id = ?1").bind(from, to),
+    db.prepare("UPDATE person_stats SET person_id = ?2 WHERE person_id = ?1 AND NOT EXISTS (SELECT 1 FROM person_stats WHERE person_id = ?2)").bind(from, to),
+    db.prepare("UPDATE feedback SET person_id = ?2 WHERE person_id = ?1").bind(from, to),
+    db
+      .prepare(
+        `UPDATE doors SET from_sender = 1 WHERE owner_user_id IN (SELECT id FROM users WHERE person_id = ?2)
+         AND created_at > (SELECT MIN(created_at) FROM knocks WHERE person_id = ?2)`,
+      )
+      .bind(from, to),
+    db.prepare("DELETE FROM people WHERE id = ?1").bind(from),
+    db.prepare("UPDATE people SET email = ?1, email_hash = ?2 WHERE id = ?3").bind(email, emailHash, to),
+  ]);
 };
 
 // People are matched on the exact address. emailKey (which drops "+tag") is for knock dedupe only: on a

@@ -1,9 +1,12 @@
-export type Receipt = { to: string; link: string; who: string; days: number };
-export type Closure = { to: string; message: string; who: string; later?: boolean; expired?: boolean };
+import { ownDoorPath } from "../shared/growth";
+
+// k: the knock the email is about, carried into the own-door link for attribution. Optional so queued jobs still send.
+export type Receipt = { to: string; link: string; who: string; days: number; k?: string };
+export type Closure = { to: string; message: string; who: string; later?: boolean; expired?: boolean; k?: string };
 export type MailEnv = { RESEND_API_KEY?: string; EMAIL_FROM?: string; PUBLIC_ORIGIN?: string };
 
 // Sender emails end with the own-door link; skipped when the public origin isn't configured.
-const ownDoor = (env: MailEnv) => (env.PUBLIC_ORIGIN ? `\n\n—\nGet every request answered on your own posts: ${new URL("/go/door?from=email", env.PUBLIC_ORIGIN).href}` : "");
+const ownDoor = (env: MailEnv, k?: string) => (env.PUBLIC_ORIGIN ? `\n\n—\nGet every request answered on your own posts: ${new URL(ownDoorPath("email", null, k), env.PUBLIC_ORIGIN).href}` : "");
 
 // Every email that isn't a security notice ends with the direct line to the founder.
 const talk = (env: MailEnv) => (env.PUBLIC_ORIGIN ? `\n\nQuestion or problem? Talk to Bharath, I reply within 24 hours: ${new URL("/feedback?from=email", env.PUBLIC_ORIGIN).href}` : "");
@@ -18,7 +21,7 @@ export const sendReceipt = async (env: MailEnv, r: Receipt, fetcher: typeof fetc
       from: env.EMAIL_FROM,
       to: r.to,
       subject: `Your knock reached ${r.who}`,
-      text: `Your knock was delivered to ${r.who}.\n\nThey have promised an answer within ${r.days} days. Follow it here:\n${r.link}\n\nKeep this link private. Anyone with it can see the status.${talk(env)}${ownDoor(env)}`,
+      text: `Your knock was delivered to ${r.who}.\n\nThey have promised an answer within ${r.days} days. Follow it here:\n${r.link}\n\nKeep this link private. Anyone with it can see the status.${talk(env)}${ownDoor(env, r.k)}`,
     }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
@@ -31,13 +34,13 @@ export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetc
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: (r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)`) + talk(env) + ownDoor(env) }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: (r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)`) + talk(env) + ownDoor(env, r.k) }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
 };
 
-export type Yes = { to: string; who: string; url: string | null; note: string | null; code?: string | null };
+export type Yes = { to: string; who: string; url: string | null; note: string | null; code?: string | null; k?: string };
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 // ponytail: regex, so a bare "Node.js" is also masked; the booking link is the only link channel in a Yes
@@ -53,7 +56,7 @@ export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fe
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: `${r.who} said yes`, text: parts.join("\n\n") + talk(env) + ownDoor(env) }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: `${r.who} said yes`, text: parts.join("\n\n") + talk(env) + ownDoor(env, r.k) }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";

@@ -5,8 +5,13 @@ export type Ref = (typeof REFS)[number];
 export const asRef = (s: unknown): Ref | null => ((REFS as readonly unknown[]).includes(s) ? (s as Ref) : null);
 export const asTemplate = (s: unknown): Template | null => ((templates as readonly unknown[]).includes(s) ? (s as Template) : null);
 
-// The tracked entry point every "make your own door" link goes through.
-export const ownDoorPath = (from: Ref, t?: string | null) => `/go/door?from=${from}${asTemplate(t) ? `&t=${t}` : ""}`;
+// Any safe id shape; createDoor looks it up, so an unknown id simply stores nothing.
+const KNOCK_ID = /^[A-Za-z0-9-]{1,64}$/;
+export const asKnockId = (s: unknown): string | null => (typeof s === "string" && KNOCK_ID.test(s) ? s : null);
+
+// The tracked entry point every "make your own door" link goes through. k is the knock that led here, if any.
+export const ownDoorPath = (from: Ref, t?: string | null, k?: string | null) =>
+  `/go/door?from=${from}${asTemplate(t) ? `&t=${t}` : ""}${asKnockId(k) ? `&k=${k}` : ""}`;
 
 // Starter posts for the prefilled form. The brackets are there to be replaced.
 export const STARTER: Record<Template, string> = {

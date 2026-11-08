@@ -78,6 +78,12 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
         </ul>
       </section>
 
+      <section class={`mt-10 p-6 ${card}`} aria-labelledby="fs">
+        <h2 id="fs" class="text-sm font-medium text-muted-foreground">Doors made by former senders · all time</h2>
+        <p class="mt-2 font-display text-3xl font-semibold tabular-nums">{fmt(d1.fromSenderShare, "pct")}</p>
+        <p class="mt-1 text-sm text-muted-foreground">Of {d1.doors} doors. Goal 20% by day 60. Under 20% then means the network isn't forming.</p>
+      </section>
+
       <section class="mt-10" aria-labelledby="funnel">
         <h2 id="funnel" class="text-xl">Funnel events</h2>
         {failed ? (

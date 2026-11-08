@@ -10,7 +10,7 @@ import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
-import { asRef, asTemplate } from "../shared/growth";
+import { asKnockId, asRef, asTemplate } from "../shared/growth";
 import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
@@ -359,13 +359,14 @@ const app = new Hono<AppEnv>()
   .get("/go/door", (c) => {
     const from = asRef(c.req.query("from"));
     const t = asTemplate(c.req.query("t"));
+    const k = asKnockId(c.req.query("k"));
     if (from) track(c.env.FUNNEL, "own_door_click", from, t ?? "");
-    return c.redirect(`/new${from ? `?ref=${from}${t ? `&t=${t}` : ""}` : ""}`, 302);
+    return c.redirect(`/new${from ? `?ref=${from}${t ? `&t=${t}` : ""}${k ? `&k=${k}` : ""}` : ""}`, 302);
   })
   .get("/new", async (c) => {
     // Starts the first-door timer; the POST reads it and clears it.
     if (!getCookie(c, "nt")) setCookie(c, "nt", String(Date.now()), { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/new", maxAge: 3600 });
-    return c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY, ref: asRef(c.req.query("ref")), starter: asTemplate(c.req.query("t")) }));
+    return c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY, ref: asRef(c.req.query("ref")), k: asKnockId(c.req.query("k")), starter: asTemplate(c.req.query("t")) }));
   })
   .post("/new", async (c) => {
     const form = await c.req.parseBody({ all: true });
@@ -376,7 +377,8 @@ const app = new Hono<AppEnv>()
     const post = one("post").slice(0, 10_000);
     const handleIn = owner?.handle ?? one("handle");
     const ref = asRef(one("ref"));
-    const base = { owner, siteKey: c.env.TURNSTILE_SITE_KEY, post, handle: handleIn, name: one("name"), ref };
+    const k = asKnockId(one("k"));
+    const base = { owner, siteKey: c.env.TURNSTILE_SITE_KEY, post, handle: handleIn, name: one("name"), ref, k };
     const bad = (error: string, extra = {}) => c.html(NewDoorPage({ ...base, ...extra, error }), 400);
     if (!handleSchema.safeParse(handleIn).success) return bad("Handles use 3 to 20 letters, numbers or underscores.");
     const mode = post === "" ? "claim" : one("step") === "create" ? "create" : "analyze";
@@ -401,7 +403,7 @@ const app = new Hono<AppEnv>()
       return c.html(NewDoorPage({ ...base, ...again, error: gateMessage[g] }), g === "limited" ? 429 : g === "captcha" ? 403 : 503);
     }
     const startedAt = Number(getCookie(c, "nt"));
-    const made = await createDoor(c.env.DB, parsed.data, token, Number.isFinite(startedAt) && startedAt > 0 ? startedAt : undefined);
+    const made = await createDoor(c.env.DB, parsed.data, token, Number.isFinite(startedAt) && startedAt > 0 ? startedAt : undefined, k);
     if (!made.ok) return bad(made.error);
     deleteCookie(c, "nt", { path: "/new" });
     if (ref) track(c.env.FUNNEL, "own_door_created", ref, parsed.data.template);
@@ -448,7 +450,7 @@ const app = new Hono<AppEnv>()
     }
     track(c.env.FUNNEL, "knock_sent", viewSource(c.req.query("s")), door.id);
     const link = new URL(`/k/${result.token}`, c.req.url).href;
-    await c.env.JOBS.send({ type: "receipt", to: k.email, link, who: door.name || `@${door.handle}`, days: door.windowDays });
+    await c.env.JOBS.send({ type: "receipt", to: k.email, link, who: door.name || `@${door.handle}`, days: door.windowDays, k: result.id });
     return c.redirect(`/k/${result.token}`, 303);
   })
   .post("/k/:token/delete", async (c) => {
@@ -575,8 +577,8 @@ export default {
         const sent = await (job.type === "receipt"
           ? sendReceipt(env as Secrets, job)
           : job.type === "yes"
-            ? sendYes(env as Secrets, { ...job, code: await codeFor(env.DB, (env as Secrets).CODES_KEY, job.knockId) })
-            : sendClosure(env as Secrets, job));
+            ? sendYes(env as Secrets, { ...job, k: job.knockId, code: await codeFor(env.DB, (env as Secrets).CODES_KEY, job.knockId) })
+            : sendClosure(env as Secrets, { ...job, k: job.k ?? job.knockId }));
         if (sent === "unconfigured") console.warn(`${job.type} not sent: RESEND_API_KEY or EMAIL_FROM missing`);
         message.ack();
       } catch (e) {
