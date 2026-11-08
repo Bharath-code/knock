@@ -10,7 +10,7 @@ import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DoorPage, NewDoorPage, NotFoundDoor, StatusPage } from "./door-pages";
 import { sendClosure, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
-import { confirmLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS } from "./auth";
+import { confirmLink, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS } from "./auth";
 import { ConfirmPage, SigninPage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
@@ -268,10 +268,14 @@ const app = new Hono<AppEnv>()
     await mailLink(c.env, c.env.DB, email.data, new URL(c.req.url).origin, null);
     return c.html(SigninPage({ sent: true }));
   })
-  .get("/signin/confirm", (c) => {
+  .get("/signin/confirm", async (c) => {
     c.header("cache-control", "no-store");
     c.header("referrer-policy", "no-referrer");
-    return c.html(ConfirmPage({ token: c.req.query("t") ?? "" }));
+    const token = c.req.query("t") ?? "";
+    const link = token ? await peekLink(c.env.DB, token) : null;
+    if (!link) return c.html(ConfirmPage({ token: "", error: "This link has expired or was already used. Ask for a new one." }), 400);
+    const replacing = (await ownerUser(c.env.DB, getCookie(c, "ds"))) !== null;
+    return c.html(ConfirmPage({ token, link: { email: link.email, handle: link.handle, claim: link.claim === 1, replacing } }));
   })
   .post("/signin/confirm", async (c) => {
     if (!sameOrigin(c.req.raw)) return c.text("Forbidden", 403);

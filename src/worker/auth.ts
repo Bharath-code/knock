@@ -39,12 +39,16 @@ const attach = async (db: D1Database, link: Link & { person_id: string }): Promi
   return null;
 };
 
-const personFor = async (db: D1Database, link: Link, now: number) => {
+// People are matched on the exact address. emailKey (which drops "+tag") is for knock dedupe only: on a
+// provider where a and a+x are different mailboxes, treating them as one person would be a takeover.
+// An address in an existing alias group that is not that person's own address cannot sign in.
+const personFor = async (db: D1Database, link: Link, now: number): Promise<string | null> => {
   await db
     .prepare("INSERT OR IGNORE INTO people (id, email, email_hash, created_at) VALUES (?1, ?2, ?3, ?4)")
     .bind(crypto.randomUUID(), link.email, link.email_hash, now)
     .run();
-  return (await db.prepare("SELECT id FROM people WHERE email_hash = ?1").bind(link.email_hash).first<{ id: string }>())!.id;
+  const p = await db.prepare("SELECT id, email FROM people WHERE email_hash = ?1").bind(link.email_hash).first<{ id: string; email: string }>();
+  return p && normalizeEmail(p.email) === link.email ? p.id : null;
 };
 
 // Every user gets an org on first sign-in. Senders already have a people row but no user yet.
@@ -75,7 +79,9 @@ export const confirmLink = async (db: D1Database, token: string, now = Date.now(
     if (err) return { ok: false, error: err };
     personId = link.person_id;
   } else {
-    personId = await personFor(db, link, now);
+    const found = await personFor(db, link, now);
+    if (!found) return { ok: false, error: "This address can't sign in. Use the address you first used on Doorbell." };
+    personId = found;
     await ensureUser(db, personId, link.email, now);
   }
   const session = randomHex(32);
@@ -94,3 +100,13 @@ export const personOfUser = async (db: D1Database, userId: string) =>
     .prepare("SELECT p.id, p.email, p.handle FROM users u JOIN people p ON p.id = u.person_id WHERE u.id = ?1")
     .bind(userId)
     .first<{ id: string; email: string; handle: string | null }>();
+
+// Read-only: lets the confirm page say which account the link signs into, without using the link up.
+export const peekLink = async (db: D1Database, token: string, now = Date.now()) =>
+  db
+    .prepare(
+      `SELECT l.email, p.handle, l.person_id IS NOT NULL AS claim FROM magic_links l LEFT JOIN people p ON p.id = l.person_id
+       WHERE l.token_hash = ?1 AND l.used_at IS NULL AND l.expires_at > ?2`,
+    )
+    .bind(await sha256(token), now)
+    .first<{ email: string; handle: string | null; claim: number }>();

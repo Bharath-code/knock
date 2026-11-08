@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { emailKey } from "../shared/knock";
-import { confirmLink, LINK_MS, requestLink, SESSION_MS } from "./auth";
+import { confirmLink, LINK_MS, peekLink, requestLink, SESSION_MS } from "./auth";
 import { createDoor, ownerFromToken, sha256 } from "./doors";
 import { ownerUser } from "./inbox";
 import { fakeDb } from "./testdb";
@@ -54,12 +54,34 @@ test("signing in on a second device does not log out the first, and old cookies 
   expect(await ownerUser(db, "random", now)).toBeNull();
 });
 
-test("a sender who already knocked signs in as the same person, with no duplicate row", async () => {
+test("a sender who already knocked signs in as the same person with their own address, and no alias can take it over", async () => {
   const { db, sqlite } = await fakeDb();
   sqlite.run(`INSERT INTO people (id, email, email_hash, created_at) VALUES ('s', 'a+knock@x.com', '${await sha256(emailKey("a@x.com"))}', 1)`);
-  await signIn(db, "A@x.com");
+  await signIn(db, "A+Knock@x.com");
   expect(sqlite.query("SELECT COUNT(*) n FROM people").get()).toEqual({ n: 1 });
   expect(sqlite.query("SELECT person_id FROM users").get()).toEqual({ person_id: "s" });
+  for (const alias of ["a@x.com", "a+other@x.com"]) {
+    const r = await confirmLink(db, await requestLink(db, alias, null), Date.now());
+    expect(r.ok).toBe(false);
+  }
+  expect(sqlite.query("SELECT COUNT(*) n FROM people").get()).toEqual({ n: 1 });
+  expect(sqlite.query("SELECT COUNT(*) n FROM users").get()).toEqual({ n: 1 });
+  expect(sqlite.query("SELECT COUNT(*) n FROM sessions").get()).toEqual({ n: 1 });
+});
+
+test("peeking at a link says whose account it is without using it up", async () => {
+  const { db, sqlite } = await fakeDb();
+  sqlite.run("INSERT INTO people (id, email, email_hash, handle, created_at) VALUES ('anon', 'anon@anon.doorbell.invalid', 'h', 'akash', 1)");
+  const now = Date.now();
+  const signin = await requestLink(db, "A@x.com", null, now);
+  const claim = await requestLink(db, "b@x.com", "anon", now);
+  expect(await peekLink(db, signin, now)).toEqual({ email: "a@x.com", handle: null, claim: 0 });
+  expect(await peekLink(db, claim, now)).toEqual({ email: "b@x.com", handle: "akash", claim: 1 });
+  expect(await peekLink(db, signin, now)).not.toBeNull();
+  expect(await peekLink(db, "nope", now)).toBeNull();
+  expect(await peekLink(db, signin, now + LINK_MS)).toBeNull();
+  await confirmLink(db, signin, now);
+  expect(await peekLink(db, signin, now)).toBeNull();
 });
 
 test("attaching an email to an anonymous owner follows the person fixed at request time", async () => {
