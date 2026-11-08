@@ -28,6 +28,11 @@ assert("feedback page", (await fetch(`${base}/feedback`)).ok);
 assert("feedback log is hidden without an admin session", (await fetch(`${base}/admin/feedback`)).status === 404);
 assert("home links to Talk to Bharath", homeHtml.includes('href="/feedback"'));
 
+const example = await fetch(`${base}/example`);
+const exampleHtml = await example.text();
+assert("example door and knock", example.ok && exampleHtml.includes("Sample knock") && exampleHtml.includes("Make your own door"));
+assert("make-a-door links to the example", (await (await fetch(`${base}/new`)).text()).includes('href="/example"'));
+
 const css = /<link rel="stylesheet" href="([^"]+)"/.exec(homeHtml)?.[1];
 const stylesheet = await fetch(`${base}${css}`, { headers: { accept: "text/css" } });
 assert("public stylesheet", stylesheet.ok && (await stylesheet.text()).includes("--brand-ink"));

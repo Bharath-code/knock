@@ -99,6 +99,7 @@ export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", temp
       <p class="mt-3 text-lg text-muted-foreground">
         {step2 ? "Edit what senders are asked, then create it." : "Paste the post you are about to share. Free, no sign-up."}
       </p>
+      {!step2 && <p class="mt-4 text-sm"><a href="/example">See a sample door and knock first</a></p>}
       {ref && !step2 && <p class={`mt-6 ${notice}`}>{REF_LINE[ref]}{starter ? " We started your post below. Replace the parts in [brackets]." : ""}</p>}
       {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
       <form method="post" action="/new" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
@@ -224,6 +225,32 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
     </Shell>
   );
 };
+
+const SAMPLE_REPLIES = ["Yes", "Not now", "No"] as const;
+
+export const ExamplePage = () => (
+  <Shell title="Sample door and knock | Doorbell" description="See what a door and a knock look like before you make your own.">
+    <p class="text-sm font-medium text-brass-ink">Sample, not a real person</p>
+    <h1 class="mt-2 text-3xl">What a door looks like</h1>
+    <section class={`mt-6 p-5 sm:p-6 ${card}`} aria-labelledby="sample-door">
+      <p class="leading-tight"><span class="block font-medium">Maya Rao</span><span class="text-sm text-muted-foreground">@maya</span></p>
+      <h2 id="sample-door" class="mt-4 text-xl">What I am looking for</h2>
+      <p class="mt-2 whitespace-pre-line">I'm hiring a backend engineer in Hyderabad. Knock with your work and why you're a fit, and I'll answer every request.</p>
+      <p class="mt-4 rounded-lg border border-yes/30 bg-yes-soft px-4 py-3 text-sm font-medium">Every knock is answered within 7 days.</p>
+    </section>
+    <h2 class="mt-10 text-xl">What a knock looks like in your inbox</h2>
+    <p class="mt-1 text-sm text-muted-foreground">Best fits come first. You answer with one tap.</p>
+    <section class={`mt-4 p-5 sm:p-6 ${card}`} aria-label="Sample knock">
+      <p class="flex items-center justify-between gap-3 text-xs text-muted-foreground"><span class="font-mono">maya</span><span class="font-medium text-foreground">Fit 4 of 5</span></p>
+      <p class="mt-3">Hi Maya, 4 years shipping Go services at a fintech. Built git-scope (1k stars): github.com/example/git-scope. Open to a 15-minute call?</p>
+      <div class="mt-5 flex flex-wrap gap-2" aria-hidden="true">
+        {SAMPLE_REPLIES.map((r) => <span class={`${btn({ variant: r === "Yes" ? "default" : "outline" })} pointer-events-none`}>{r}</span>)}
+      </div>
+    </section>
+    <a href="/new" class={`mt-10 ${button}`}>Make your own door</a>
+    <p class="mt-3 text-sm text-muted-foreground">It takes about a minute. Free, no sign-up.</p>
+  </Shell>
+);
 
 export const NotFoundDoor = () => (
   <Shell title="No such door | Doorbell" description="This door does not exist.">
