@@ -29,6 +29,7 @@ import { answerKnock, closeRest, listInbox, ownerDoorIds, ownerUser, ownsDoor, u
 import { asAnswer, asReason, NOTE_MAX, type Reply } from "../shared/inbox";
 import { Home } from "./home";
 import { scoreDraft, type ModelResult } from "./model";
+import { loadRankInput, pickRanker, rulesRanker, saveRank, transient } from "./rank";
 
 export { Door };
 
@@ -39,7 +40,7 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string };
+type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string; RANKER?: string };
 type AppEnv = { Bindings: Secrets };
 
 const sameOrigin = (req: Request) => req.headers.get("origin") === new URL(req.url).origin;
@@ -431,6 +432,26 @@ export default {
   async queue(batch, env) {
     for (const message of batch.messages) {
       const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type"> & Partial<Pick<CloseJob, "later">>;
+      if (job.type === "rank") {
+        const { knockId, doorId } = message.body as { knockId: string; doorId: string };
+        try {
+          const input = await loadRankInput(env.DB, knockId);
+          const ranker = pickRanker(env as Secrets, (apiKey) => new Anthropic({ apiKey, maxRetries: 0, timeout: 15_000 }));
+          if (!input || !ranker) { message.ack(); continue; }
+          let out = await ranker.rank(input);
+          if (!out.ok && transient(out.reason) && message.attempts < 5) { message.retry({ delaySeconds: 20 * message.attempts }); continue; }
+          if (!out.ok) {
+            console.warn(`rank fell back to rules: ${out.reason}`);
+            out = await rulesRanker.rank(input);
+          }
+          if (out.ok && (await saveRank(env.DB, knockId, out.rank))) await env.DOOR.getByName(doorId).announce();
+          message.ack();
+        } catch (e) {
+          console.error("rank failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 30 });
+        }
+        continue;
+      }
       if (job.type === "digest") {
         const d = message.body as DigestJob;
         const origin = (env as Secrets).PUBLIC_ORIGIN;

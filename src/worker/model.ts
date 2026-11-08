@@ -47,7 +47,7 @@ export const costUsd = (usage: { input_tokens: number; output_tokens: number }) 
 const safeRewrite = (fit: number, rewrite: string) =>
   fit >= MIN_FIT_FOR_REWRITE && [...rewrite].length < LENGTH_LIMIT ? rewrite.trim() : "";
 
-const failureFrom = (error: unknown): ModelFailure => {
+export const failureFrom = (error: unknown): ModelFailure => {
   if (error instanceof Anthropic.AuthenticationError) return "auth";
   if (error instanceof Anthropic.RateLimitError) return "rate_limited";
   if (error instanceof Anthropic.APIConnectionTimeoutError) return "timeout";

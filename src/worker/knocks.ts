@@ -17,6 +17,7 @@ const DAY_MS = 86_400_000;
 // Returns the raw status token; only its hash is stored. One D1 batch, so a knock is all-or-nothing.
 export const writeKnock = async (db: D1Database, k: KnockWrite, now = Date.now()) => {
   const token = randomHex(16);
+  const id = crypto.randomUUID();
   const emailHash = await sha256(k.key);
   const person = "(SELECT id FROM people WHERE email_hash = ?)";
   await db.batch([
@@ -29,7 +30,7 @@ export const writeKnock = async (db: D1Database, k: KnockWrite, now = Date.now()
          VALUES (?, ?, ?, ${person}, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        crypto.randomUUID(), k.orgId, k.doorId, emailHash,
+        id, k.orgId, k.doorId, emailHash,
         JSON.stringify({ message: k.message, answers: k.answers }), k.proof || null, now, k.source,
         await sha256(token), now, now + k.windowDays * DAY_MS,
       ),
@@ -45,7 +46,7 @@ export const writeKnock = async (db: D1Database, k: KnockWrite, now = Date.now()
       )
       .bind(emailHash, now),
   ]);
-  return token;
+  return { token, id };
 };
 
 export type Status = {

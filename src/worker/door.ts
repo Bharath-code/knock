@@ -55,7 +55,9 @@ export class Door extends DurableObject<Env> {
     const verdict = admit(sql, k.key, ip);
     if (verdict !== "ok") return { ok: false, reason: verdict };
     try {
-      const token = await writeKnock(this.env.DB, k);
+      const { token, id } = await writeKnock(this.env.DB, k);
+      // Scored off the request path; the knock shows as "Not scored" until the job lands.
+      await this.env.JOBS.send({ type: "rank", knockId: id, doorId: k.doorId }).catch((e) => console.error("rank enqueue failed", e instanceof Error ? e.message : e));
       await this.rearm().catch((e) => console.error("rearm failed", e instanceof Error ? e.message : e));
       this.announce();
       return { ok: true, token };
