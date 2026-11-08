@@ -150,10 +150,26 @@ test("signing out removes only that device's session", async () => {
   const { db } = await fakeDb();
   const a = await signIn(db, "a@x.com");
   const b = await signIn(db, "a@x.com");
-  expect(await signOut(db, a)).toBe(true);
+  expect(await signOut(db, a)).toBe("session");
   expect(await ownerUser(db, a)).toBeNull();
   expect(await ownerUser(db, b)).not.toBeNull();
-  expect(await signOut(db, "unknown")).toBe(false);
+  expect(await signOut(db, "unknown")).toBe("none");
+});
+
+test("signing out with a legacy cookie retires that credential, and refuses when an email is the only way back in", async () => {
+  const { db, sqlite } = await fakeDb();
+  const session = await signIn(db, "a@x.com");
+  sqlite.run(`UPDATE people SET owner_token_hash = '${await sha256("legacy")}'`);
+  expect(await ownerUser(db, "legacy")).not.toBeNull();
+  expect(await signOut(db, "legacy")).toBe("legacy");
+  expect(await ownerUser(db, "legacy")).toBeNull();
+  expect(await ownerUser(db, session)).not.toBeNull();
+  expect(sqlite.query("SELECT action FROM audit_log WHERE action = 'auth.sign_out_legacy'").all()).toHaveLength(1);
+
+  sqlite.run("INSERT INTO people (id, email, email_hash, handle, owner_token_hash, created_at) VALUES ('anon', 'anon@anon.doorbell.invalid', 'h', 'anon', '" + (await sha256("anon-cookie")) + "', 1)");
+  sqlite.run("INSERT INTO orgs VALUES ('o2','o2','free',1); INSERT INTO users VALUES ('u2','o2','anon','owner',1)");
+  expect(await signOut(db, "anon-cookie")).toBe("anonymous");
+  expect(await ownerUser(db, "anon-cookie")).not.toBeNull();
 });
 
 test("sign out everywhere ends every session and the legacy cookie, but only with a real email", async () => {

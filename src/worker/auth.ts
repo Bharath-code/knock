@@ -119,8 +119,25 @@ export const confirmLink = async (db: D1Database, token: string, now = Date.now(
   return { ok: true, token: session, alert: others?.n && !link.person_id ? link.email : null };
 };
 
-export const signOut = async (db: D1Database, token: string) =>
-  (await db.prepare("DELETE FROM sessions WHERE token_hash = ?1").bind(await sha256(token)).run()).meta.changes === 1;
+export type SignedOut = "session" | "legacy" | "anonymous" | "none";
+
+// A session is deleted. A legacy owner cookie is one shared credential, not a per-device session, so
+// signing out with it retires the credential itself; without a real email that would lock the owner out.
+export const signOut = async (db: D1Database, token: string, now = Date.now()): Promise<SignedOut> => {
+  const hash = await sha256(token);
+  if ((await db.prepare("DELETE FROM sessions WHERE token_hash = ?1").bind(hash).run()).meta.changes === 1) return "session";
+  const p = await db
+    .prepare("SELECT p.id, p.email, u.org_id FROM people p JOIN users u ON u.person_id = p.id WHERE p.owner_token_hash = ?1")
+    .bind(hash)
+    .first<{ id: string; email: string; org_id: string }>();
+  if (!p) return "none";
+  if (p.email.endsWith(PLACEHOLDER)) return "anonymous";
+  await db.batch([
+    db.prepare("UPDATE people SET owner_token_hash = NULL WHERE id = ?1 AND owner_token_hash = ?2").bind(p.id, hash),
+    db.prepare("INSERT INTO audit_log (id, org_id, actor, action, target, at) VALUES (?1, ?2, ?3, 'auth.sign_out_legacy', NULL, ?4)").bind(crypto.randomUUID(), p.org_id, p.id, now),
+  ]);
+  return "legacy";
+};
 
 // Needs a real email, since it also retires the legacy owner cookie and the email is the way back in.
 export const signOutEverywhere = async (db: D1Database, userId: string, orgId: string, now = Date.now()) => {

@@ -152,7 +152,9 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
       if (!(await signOutEverywhere(c.env.DB, o.userId, o.orgId))) return c.json({ error: "Add and confirm an email first, so you can sign back in." }, 409);
     } else {
       const t = getCookie(c, "ds");
-      if (t) await signOut(c.env.DB, t);
+      if (t && (await signOut(c.env.DB, t)) === "anonymous") {
+        return c.json({ error: "Add and confirm an email first. Without one, signing out would lock you out of your door." }, 409);
+      }
     }
     deleteCookie(c, "ds", { path: "/" });
     return c.json({ ok: true });
