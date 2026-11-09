@@ -16,14 +16,15 @@ import { auditCsv, logAudit } from "./audit";
 import { galleryDoor, galleryRows, setListed } from "./gallery";
 import { badgeFor, badgeRows, badgeSvg, refreshDoorStats, setBadge } from "./stats";
 import { asKnockId, asRef, asTemplate, STARTER } from "../shared/growth";
-import { sendClosure, sendDigest, sendWeekly, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { sendPass, sendClosure, sendDigest, sendWeekly, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { weeklyJobs, type WeeklyJob } from "./weekly";
+import { confirmPass, offerPass, PASS_REFUSAL, passView, stillPassed, type PassJob } from "./pass";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
 import { checkinView, dueCheckins, recordOutcome, type CheckinJob } from "./checkin";
 import { dueReminders, REMIND_MS, type ReminderJob } from "./reminders";
 import { seenJobs, seenOff, stillSeen, type SeenJob } from "./seen";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
-import { ConfirmPage, OutcomePage, SeenOffPage, SigninPage, UnsubscribePage } from "./auth-pages";
+import { ConfirmPage, OutcomePage, PassConfirmPage, SeenOffPage, SigninPage, UnsubscribePage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { closeExpired, notifyExpired } from "./expire";
@@ -156,6 +157,26 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     }
     return c.json({ ok: true, code });
   })
+  .post(
+    "/:id/pass",
+    validator("json", (v, c) => {
+      const b = (v ?? {}) as { to?: unknown; note?: unknown };
+      if (typeof b.to !== "string" || !b.to.trim() || b.to.length > 300 || (b.note != null && (typeof b.note !== "string" || b.note.length > NOTE_MAX))) {
+        return c.json({ error: "Pick a door or paste its link, and keep the note to 140 characters." }, 400);
+      }
+      return { to: b.to, note: (b.note as string | undefined) ?? "" };
+    }),
+    async (c) => {
+    const b = c.req.valid("json");
+    const r = await offerPass(c.env.DB, c.get("owner"), c.req.param("id"), b.to, b.note);
+    if (!r.ok) return c.json({ error: PASS_REFUSAL[r.reason] }, r.reason === "limited" ? 429 : r.reason === "open" ? 409 : 400);
+    track(c.env.FUNNEL, "answered", "pass", c.req.param("id"));
+    track(c.env.FUNNEL, "pass", "", c.req.param("id"));
+    const { ok: _ok, ...job } = r;
+    await c.env.JOBS.send(job, { delaySeconds: YES_DELAY_S });
+    return c.json({ ok: true });
+    },
+  )
   .get("/codes", async (c) => c.json(await pools(c.env.DB, c.get("owner"))))
   .post("/codes", async (c) => {
     if (!c.env.CODES_KEY) return c.json({ error: "Invite codes aren't set up yet." }, 503);
@@ -385,6 +406,24 @@ const app = new Hono<AppEnv>()
     if (r === "ok") track(c.env.FUNNEL, "outcome", happened ? "yes" : "none", "");
     const view = await checkinView(c.env.DB, token);
     return c.html(OutcomePage({ token, view, done: r !== "invalid" }), r === "invalid" ? 404 : 200);
+  })
+  // GET only shows the page: mail scanners prefetch links, so nothing is sent until the POST.
+  .get("/p/:token", async (c) => {
+    c.header("cache-control", "private, no-store");
+    const view = await passView(c.env.DB, c.req.param("token"));
+    return c.html(PassConfirmPage({ token: c.req.param("token"), view }), view ? 200 : 404);
+  })
+  .post("/p/:token", async (c) => {
+    c.header("cache-control", "private, no-store");
+    const token = c.req.param("token");
+    const r = await confirmPass(c.env, token, ipKey(clientIp(c.req.raw)));
+    const view = await passView(c.env.DB, token);
+    if (!r.ok) return c.html(PassConfirmPage({ token, view, error: r.reason }), r.reason === "invalid" ? 404 : r.reason === "limited" ? 429 : 409);
+    if (!r.already) {
+      track(c.env.FUNNEL, "knock_sent", "pass", "");
+      await c.env.JOBS.send({ type: "receipt", to: r.to, link: new URL(`/k/${r.token}`, c.req.url).href, who: r.who, days: r.days, k: r.id });
+    }
+    return c.html(PassConfirmPage({ token, view, done: true }));
   })
   .get("/u/:token/seen", async (c) => {
     c.header("cache-control", "private, no-store");
@@ -714,6 +753,22 @@ export default {
           message.ack();
         } catch (e) {
           console.error("seen failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 60 });
+        }
+        continue;
+      }
+      if (job.type === "pass") {
+        const p = message.body as PassJob;
+        const origin = (env as Secrets).PUBLIC_ORIGIN;
+        try {
+          if (!origin) throw new Error("PUBLIC_ORIGIN missing");
+          if (await stillPassed(env.DB, p.knockId, p.at)) {
+            const sent = await sendPass(env as Secrets, { to: p.to, by: p.by, toName: p.toName, note: p.note, link: new URL(`/p/${p.token}`, origin).href, k: p.knockId });
+            if (sent === "unconfigured") console.warn("pass not sent: RESEND_API_KEY or EMAIL_FROM missing");
+          }
+          message.ack();
+        } catch (e) {
+          console.error("pass failed", e instanceof Error ? e.message : e);
           message.retry({ delaySeconds: 60 });
         }
         continue;

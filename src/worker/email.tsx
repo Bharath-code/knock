@@ -5,6 +5,7 @@ import { Digest as DigestEmail } from "./emails/Digest";
 import { Weekly as WeeklyEmail } from "./emails/Weekly";
 import { Receipt as ReceiptEmail } from "./emails/Receipt";
 import { Yes as YesEmail } from "./emails/Yes";
+import { Pass as PassEmail } from "./emails/Pass";
 
 // k: the knock the email is about, carried into the own-door link for attribution. Optional so queued jobs still send.
 export type Receipt = { to: string; link: string; who: string; days: number; k?: string };
@@ -73,6 +74,29 @@ export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fe
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, html, subject: `${r.who} said yes`, text: parts.join("\n\n") + talk(env) + ownDoor(env, r.k) }),
+  });
+  if (!res.ok) throw new Error(`email provider ${res.status}`);
+  return "sent";
+};
+
+export type Pass = { to: string; by: string; toName: string; note: string | null; link: string; k?: string };
+
+export const sendPass = async (env: MailEnv, raw: Pass, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const by = stripLinks(raw.by);
+  const toName = stripLinks(raw.toName);
+  const note = raw.note && stripLinks(raw.note);
+  const html = await render(<PassEmail by={by} toName={toName} note={note} link={raw.link} {...links(env, raw.k)} />);
+  const res = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: raw.to,
+      html,
+      subject: `${by} passed you to ${toName}'s door`,
+      text: `${by} passed you to ${toName}'s door.${note ? `\n\n"${note}"` : ""}\n\nIf you agree, one tap sends your knock to ${toName}. Nothing is shared until you do:\n${raw.link}\n\nThe link works for 7 days.${talk(env)}${ownDoor(env, raw.k)}`,
+    }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";

@@ -20,6 +20,7 @@ const FUNNEL = [
   ["seen", "Seen by receiver"],
   ["answered", "Answered"],
   ["yes", "Yes"],
+  ["pass", "Passed to another door"],
   ["outcome", "Outcomes"],
   ["own_door_click", "Own-door clicks"],
   ["own_door_created", "Own doors created"],
@@ -53,6 +54,12 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
         <p class="mt-1 text-sm text-muted-foreground">
           {d1.firstDoor.median !== null ? `Median ${Math.round(d1.firstDoor.median)} s. ` : ""}Timed from opening /new to creating the first door. Goal: 4 of 5. Needs 5 new receivers; older doors aren't timed.
         </p>
+      </section>
+
+      <section class={`mt-10 p-6 ${card}`} aria-labelledby="pw">
+        <h2 id="pw" class="text-sm font-medium text-muted-foreground">Passes per week · last 7 days</h2>
+        <p class="mt-2 font-display text-3xl font-semibold tabular-nums">{d1.passes.pending + d1.passes.accepted + d1.passes.declined}</p>
+        <p class="mt-1 text-sm text-muted-foreground">{d1.passes.accepted} confirmed by the sender · {d1.passes.pending} waiting · {d1.passes.declined} declined.</p>
       </section>
 
       <section class="mt-10" aria-labelledby="targets">

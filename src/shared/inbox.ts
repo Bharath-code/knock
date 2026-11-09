@@ -35,6 +35,7 @@ export type InboxCard = {
   chips: Chip[];
   createdAt: number;
   expiresAt: number;
+  passedBy?: string;
 };
 
 // Swipe right = Yes, left = No, up = Not now. Returns null for a small or ambiguous drag.

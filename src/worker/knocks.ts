@@ -11,6 +11,7 @@ export type KnockWrite = {
   answers: { q: string; a: string }[];
   proof: string;
   source: string;
+  passedFrom?: string;
 };
 
 const DAY_MS = 86_400_000;
@@ -29,12 +30,12 @@ export const writeKnock = async (db: D1Database, k: KnockWrite, now = Date.now()
       .bind(crypto.randomUUID(), email, emailHash, now),
     db
       .prepare(
-        `INSERT INTO knocks (id, org_id, door_id, person_id, answers_json, proof_url, consent_at, source, token_hash, created_at, expires_at)
-         VALUES (?, ?, ?, ${person}, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO knocks (id, org_id, door_id, person_id, answers_json, proof_url, consent_at, source, passed_from_knock_id, token_hash, created_at, expires_at)
+         VALUES (?, ?, ?, ${person}, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id, k.orgId, k.doorId, email,
-        JSON.stringify({ message: k.message, answers: k.answers }), k.proof || null, now, k.source,
+        JSON.stringify({ message: k.message, answers: k.answers }), k.proof || null, now, k.source, k.passedFrom ?? null,
         await sha256(token), now, now + k.windowDays * DAY_MS,
       ),
     db

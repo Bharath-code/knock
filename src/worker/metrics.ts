@@ -1,4 +1,4 @@
-export const EVENTS = ["door_view", "knock_start", "knock_sent", "seen", "answered", "yes", "outcome", "own_door_click", "own_door_created"] as const;
+export const EVENTS = ["door_view", "knock_start", "knock_sent", "seen", "answered", "yes", "pass", "outcome", "own_door_click", "own_door_created"] as const;
 export type FunnelEvent = (typeof EVENTS)[number];
 
 // blob1 = event, blob2 = detail (source, ref or answer), blob3 = door id or template, double1 = how many.
@@ -35,11 +35,12 @@ export type D1Metrics = {
   knocks: number;
   doors: number;
   fromSenderShare: number | null;
+  passes: { pending: number; accepted: number; declined: number };
 };
 
 // Truth comes from D1, not events: undo deletes the decision row, so nothing double-counts.
 export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Metrics> => {
-  const [ns, rec, closed, k, out, fd, fs] = await db.batch([
+  const [ns, rec, closed, k, out, fd, fs, ps] = await db.batch([
     db.prepare("SELECT COUNT(*) n FROM decisions WHERE answer IN ('yes','later','no') AND at >= ?1").bind(now - WEEK),
     db.prepare("SELECT COUNT(DISTINCT owner_user_id) n FROM doors"),
     db.prepare("SELECT COUNT(*) total, COALESCE(SUM(answer <> 'expired'), 0) answered FROM decisions WHERE answer IN ('yes','later','no','expired') AND at >= ?1").bind(now - PERIOD),
@@ -47,7 +48,10 @@ export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Met
     db.prepare("SELECT COUNT(DISTINCT knock_id) n FROM outcomes WHERE type <> 'none' AND at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT first_door_secs s FROM doors WHERE first_door_secs IS NOT NULL ORDER BY created_at DESC LIMIT 5"),
     db.prepare("SELECT COUNT(*) doors, COALESCE(SUM(from_sender), 0) former FROM doors"),
+    db.prepare("SELECT status, COUNT(*) n FROM passes WHERE created_at >= ?1 GROUP BY status").bind(now - WEEK),
   ]);
+  const passes = { pending: 0, accepted: 0, declined: 0 };
+  for (const r of (ps as D1Result<{ status: keyof typeof passes; n: number }>).results ?? []) passes[r.status] = r.n;
   const one = <T,>(r: unknown) => ((r as D1Result<T>).results[0] ?? {}) as T;
   const c = one<{ total: number; answered: number }>(closed);
   const kk = one<{ knocks: number; doors: number }>(k);
@@ -62,6 +66,7 @@ export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Met
     knocks: kk.knocks ?? 0,
     doors: f.doors ?? 0,
     fromSenderShare: f.doors ? f.former / f.doors : null,
+    passes,
   };
 };
 

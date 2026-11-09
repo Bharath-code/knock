@@ -19,7 +19,7 @@ export const refreshDoorStats = async (db: D1Database, now = Date.now()) => {
     .prepare(
       `SELECT k.door_id AS door, d.answer, k.created_at AS made, k.answered_at AS answered
        FROM decisions d JOIN knocks k ON k.id = d.knock_id
-       WHERE d.answer IN ('yes', 'later', 'no', 'expired') AND d.at >= ?1`,
+       WHERE d.answer IN ('yes', 'later', 'no', 'pass', 'expired') AND d.at >= ?1`,
     )
     .bind(now - 90 * DAY)
     .all<{ door: string; answer: string; made: number; answered: number | null }>();

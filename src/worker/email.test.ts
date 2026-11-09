@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
+import { sendPass, sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
 
 const r = { to: "a@x.com", link: "https://d.dev/k/abc", who: "Akash", days: 7 };
 const reply = (status: number, seen: { body?: string }) =>
@@ -153,4 +153,16 @@ test("digest html keeps the unsubscribe link and header, strips links, and keeps
   expect(b.html).not.toContain("evil.co");
   expect(b.headers["List-Unsubscribe"]).toBe("<https://d.dev/u/tok>");
   expect(b.text).toContain("Turn it off: https://d.dev/u/tok");
+});
+
+test("pass email names who passed, strips links from the note and carries the confirm link", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  const seen: { body?: string } = {};
+  expect(await sendPass(env, { to: "a@x.com", by: "Riya", toName: "Arjun", note: "try https://evil.example now", link: "https://d.dev/p/abc" }, reply(200, seen))).toBe("sent");
+  const b = JSON.parse(seen.body!);
+  expect(b.subject).toBe("Riya passed you to Arjun's door");
+  expect(b.text).toContain("https://d.dev/p/abc");
+  expect(b.text).toContain("[link removed]");
+  expect(b.text).not.toContain("evil.example");
+  expect(b.html).toContain("Review and send");
 });
