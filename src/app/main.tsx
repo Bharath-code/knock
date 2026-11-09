@@ -1,12 +1,12 @@
 import { cn } from "cn";
 import { hc } from "hono/client";
-import { CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, LogOut, Settings as SettingsIcon, MessageCircle } from "lucide-react";
+import { Bell, CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, LogOut, Settings as SettingsIcon, MessageCircle } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { closureMessage } from "../shared/closure";
 import { splitAround } from "../shared/chips";
-import { CLOSE_MESSAGE, keyAction, minutesTaken, MOMENT_MIN, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
+import { CLOSE_MESSAGE, keyAction, minutesTaken, MOMENT_MIN, NOTE_MAX, REASONS, POLL_MS, safeProof, popUndo, pushUndo, sortCards, swipeAnswer, UNDO_MS, type UndoEntry, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Pool } from "../shared/codes";
 import { card as cardBox } from "../shared/ui";
 import type { Api } from "../worker";
@@ -144,7 +144,9 @@ const App = () => {
   const [codeText, setCodeText] = useState("");
   const streak = useRef({ n: 0, t0: 0 });
   const [moment, setMoment] = useState<{ n: number; m: number } | null>(null);
-  const undo = useRef<{ card: InboxCard; index: number; t: ReturnType<typeof setTimeout> } | null>(null);
+  const undo = useRef<UndoEntry<{ card: InboxCard; index: number; a: InboxAnswer }>[]>([]);
+  const [ring, setRing] = useState(0);
+  const [news, setNews] = useState(0);
   const settings = path.startsWith("/app/settings");
 
   useEffect(() => {
@@ -278,6 +280,7 @@ const App = () => {
           const curId = cur[iRef.current]?.id;
           const merged = sortCards([...rescored, ...fresh]);
           const at = Math.max(0, merged.findIndex((c) => c.id === curId));
+          if (fresh.length) { setRing((n) => n + 1); setNews((n) => n + fresh.length); }
           cardsRef.current = merged;
           iRef.current = at;
           setCards(merged);
@@ -309,14 +312,16 @@ const App = () => {
 
   // Read from a ref so the toast's Undo button and the U key always see the latest answer.
   const undoLast = useCallback(async () => {
-    const u = undo.current;
-    if (!u) return;
-    clearTimeout(u.t);
-    undo.current = null;
+    const { entry, rest } = popUndo(undo.current, Date.now());
+    undo.current = rest;
     toast.dismiss("undo");
+    if (!entry) return;
+    const u = entry.item;
     const r = await api.inbox[":id"].undo.$post({ param: { id: u.card.id } }).catch(() => null);
     if (r?.ok) { void loadPools(); answered.current.delete(u.card.id); streak.current.n = Math.max(0, streak.current.n - 1); setMoment(null); setCards((cs) => [...cs!.slice(0, u.index), u.card, ...cs!.slice(u.index)]); setI(u.index); }
     else fail("Too late to undo.");
+    const next = rest.at(-1);
+    if (next && next.until > Date.now()) toast(`Answered ${LABEL[next.item.a]}`, { id: "undo", duration: next.until - Date.now(), action: { label: "Undo", onClick: () => void undoLast() } });
   }, [loadPools]);
 
   const answer = useCallback(async (a: InboxAnswer) => {
@@ -341,8 +346,7 @@ const App = () => {
         if (st.n >= MOMENT_MIN) setMoment({ n: st.n, m: minutesTaken(Date.now() - st.t0) });
         else streak.current = { n: 0, t0: 0 };
       }
-      if (undo.current) clearTimeout(undo.current.t);
-      undo.current = { card, index: i, t: setTimeout(() => { undo.current = null; }, UNDO_MS) };
+      undo.current = pushUndo(undo.current, { card, index: i, a }, Date.now());
       toast(`Answered ${LABEL[a]}`, { id: "undo", duration: UNDO_MS, action: { label: "Undo", onClick: () => void undoLast() } });
       return;
     }
@@ -359,7 +363,8 @@ const App = () => {
     const { closed } = await r.json();
     setCards([]);
     streak.current = { n: 0, t0: 0 };
-    undo.current = null;
+    undo.current = [];
+    toast.dismiss("undo");
     toast.success(`Closed ${closed} ${closed === 1 ? "knock" : "knocks"}. Each sender was emailed.`);
   });
 
@@ -379,6 +384,13 @@ const App = () => {
 
   const card = cards?.[i];
   const open = cards?.length ?? 0;
+  useEffect(() => {
+    document.title = news > 0 ? `(${news}) Doorbell` : "Doorbell";
+    if (news === 0) return;
+    const clear = () => { if (document.visibilityState === "visible") setNews(0); };
+    const t = setInterval(clear, 8000);
+    return () => clearInterval(t);
+  }, [news]);
   useEffect(() => {
     if (card && moment) { setMoment(null); streak.current = { n: 0, t0: 0 }; }
   }, [card, moment]);
@@ -500,6 +512,8 @@ const App = () => {
             <DoorClosed className="size-5 text-primary" aria-hidden />
             <span className="max-sm:hidden">Doorbell</span>
           </a>
+          <Bell key={ring} className={cn("size-4 text-primary", ring > 0 && "motion-safe:animate-ring")} aria-hidden />
+          <p role="status" aria-live="polite" className={news > 0 ? "text-xs font-medium text-muted-foreground" : "sr-only"}>{news > 0 ? `${news} new ${news === 1 ? "knock" : "knocks"}` : ""}</p>
           <nav className="flex items-center gap-1">
             <a href="/app" onClick={go("/app")} aria-current={!settings ? "page" : undefined} className={tab}>
               Inbox{open > 0 && <Badge className="h-5 min-w-5 rounded-full px-1.5 tabular">{open}</Badge>}

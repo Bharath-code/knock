@@ -16,7 +16,8 @@ import { auditCsv, logAudit } from "./audit";
 import { galleryDoor, galleryRows, setListed } from "./gallery";
 import { badgeFor, badgeRows, badgeSvg, refreshDoorStats, setBadge } from "./stats";
 import { asKnockId, asRef, asTemplate, STARTER } from "../shared/growth";
-import { sendClosure, sendDigest, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { sendClosure, sendDigest, sendWeekly, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { weeklyJobs, type WeeklyJob } from "./weekly";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
 import { checkinView, dueCheckins, recordOutcome, type CheckinJob } from "./checkin";
 import { dueReminders, REMIND_MS, type ReminderJob } from "./reminders";
@@ -659,6 +660,20 @@ export default {
         }
         continue;
       }
+      if (job.type === "weekly") {
+        const w = message.body as WeeklyJob;
+        const origin = (env as Secrets).PUBLIC_ORIGIN;
+        try {
+          if (!origin) throw new Error("PUBLIC_ORIGIN missing");
+          const sent = await sendWeekly(env as Secrets, { to: w.to, n: w.n, inbox: new URL("/app", origin).href, unsubscribe: new URL(`/u/${w.token}`, origin).href });
+          if (sent === "unconfigured") console.warn("weekly not sent: RESEND_API_KEY or EMAIL_FROM missing");
+          message.ack();
+        } catch (e) {
+          console.error("weekly failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 60 });
+        }
+        continue;
+      }
       if (job.type === "checkin") {
         const ck = message.body as CheckinJob;
         const origin = (env as Secrets).PUBLIC_ORIGIN;
@@ -741,5 +756,7 @@ export default {
     if (at.getUTCHours() === 2 && at.getUTCMinutes() < 15) await refreshDoorStats(env.DB);
     const digests = await digestJobs(env.DB);
     for (let i = 0; i < digests.length; i += 100) await env.JOBS.sendBatch(digests.slice(i, i + 100).map((body) => ({ body })));
+    const weekly = await weeklyJobs(env.DB);
+    for (let i = 0; i < weekly.length; i += 100) await env.JOBS.sendBatch(weekly.slice(i, i + 100).map((body) => ({ body })));
   },
 } satisfies ExportedHandler<Env>;

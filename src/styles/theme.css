@@ -231,6 +231,14 @@
   }
 }
 
+@keyframes ring {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(18deg); }
+  35% { transform: rotate(-16deg); }
+  55% { transform: rotate(10deg); }
+  75% { transform: rotate(-6deg); }
+}
+
 @keyframes fade {
   from {
     opacity: 0;
@@ -238,6 +246,10 @@
 }
 
 @layer utilities {
+  .animate-ring {
+    transform-origin: 50% 0;
+    animation: ring 700ms var(--ease-out);
+  }
   .animate-rise {
     animation: rise var(--d-base) var(--ease-out);
   }

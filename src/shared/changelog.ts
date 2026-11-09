@@ -4,6 +4,15 @@ export type Release = { date: string; title: string; points: string[] };
 export const CHANGELOG: Release[] = [
   {
     date: "2026-11-09",
+    title: "Small delights",
+    points: [
+      "A bell rings, the tab title shows a count and the header says so when a new knock arrives in an open inbox.",
+      "Monday at 08:00 your time, you get one email counting the people you answered that week. The same unsubscribe link turns it off.",
+      "Answer several knocks in a row and each one can still be undone for 5 seconds, newest first.",
+    ],
+  },
+  {
+    date: "2026-11-09",
     title: "Better-looking emails",
     points: ["Receipts, Yes, No, Not now, expired and digest emails now have a clean layout with a button, and follow your light or dark mode."],
   },

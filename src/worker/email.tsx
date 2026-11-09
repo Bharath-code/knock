@@ -2,6 +2,7 @@ import { render } from "@react-email/render";
 import { ownDoorPath } from "../shared/growth";
 import { Closure as ClosureEmail } from "./emails/Closure";
 import { Digest as DigestEmail } from "./emails/Digest";
+import { Weekly as WeeklyEmail } from "./emails/Weekly";
 import { Receipt as ReceiptEmail } from "./emails/Receipt";
 import { Yes as YesEmail } from "./emails/Yes";
 
@@ -195,6 +196,29 @@ export const sendDigest = async (env: MailEnv, r: Digest, fetcher: typeof fetch 
       to: r.to,
       html,
       subject: `${n(r.fresh, "new knock")} on your door`,
+      text,
+      headers: { "List-Unsubscribe": `<${r.unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+    }),
+  });
+  if (!res.ok) throw new Error(`email provider ${res.status}`);
+  return "sent";
+};
+
+export type Weekly = { to: string; n: number; inbox: string; unsubscribe: string };
+
+export const sendWeekly = async (env: MailEnv, r: Weekly, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const summary = `You answered ${r.n} ${r.n === 1 ? "person" : "people"} this week.`;
+  const text = [summary, "Every one of them got a real reply instead of silence.", `Open your inbox: ${r.inbox}`, `You get this at most once a week, only when you answered someone.\nTurn it off: ${r.unsubscribe}`].join("\n\n") + talk(env);
+  const html = await render(<WeeklyEmail summary={summary} inbox={r.inbox} unsubscribe={r.unsubscribe} talk={links(env).talk} />);
+  const res = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: r.to,
+      html,
+      subject: summary,
       text,
       headers: { "List-Unsubscribe": `<${r.unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
     }),

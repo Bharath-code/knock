@@ -27,10 +27,10 @@ export const Cta = ({ href, children }: { href: string; children: ReactNode }) =
   <Button className="btn" href={href} style={{ backgroundColor: c.brass, color: "#ffffff", fontSize: 15, fontWeight: 600, padding: "12px 20px", borderRadius: 8, textDecoration: "none", display: "inline-block", margin: "0 0 16px" }}>{children}</Button>
 );
 
-export type LayoutProps = { preview: string; children: ReactNode; talk?: string; ownDoor?: string; unsubscribe?: string };
+export type LayoutProps = { preview: string; children: ReactNode; talk?: string; ownDoor?: string; unsubscribe?: string; cadence?: string };
 export type Extra = Omit<LayoutProps, "preview" | "children">;
 
-export const Layout = ({ preview, children, talk, ownDoor, unsubscribe }: LayoutProps) => (
+export const Layout = ({ preview, children, talk, ownDoor, unsubscribe, cadence = "at most once a day, only when there are new knocks" }: LayoutProps) => (
   <Html lang="en">
     <Head>
       <meta name="color-scheme" content="light dark" />
@@ -48,7 +48,7 @@ export const Layout = ({ preview, children, talk, ownDoor, unsubscribe }: Layout
           {(talk || ownDoor || unsubscribe) && <Hr className="line" style={{ borderColor: c.line, margin: "8px 0 16px" }} />}
           {unsubscribe && (
             <P muted>
-              You get this at most once a day, only when there are new knocks. <Link className="lnk" href={unsubscribe} style={{ color: c.brass }}>Turn it off</Link>.
+              You get this {cadence}. <Link className="lnk" href={unsubscribe} style={{ color: c.brass }}>Turn it off</Link>.
             </P>
           )}
           {talk && (

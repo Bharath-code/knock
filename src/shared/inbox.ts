@@ -1,5 +1,13 @@
 import type { Chip } from "./chips";
 export const UNDO_MS = 5_000;
+// Each answer stays undoable for its own window; the newest is popped first.
+export type UndoEntry<T> = { item: T; until: number };
+export const pushUndo = <T>(stack: UndoEntry<T>[], item: T, now: number): UndoEntry<T>[] => [...live(stack, now), { item, until: now + UNDO_MS }];
+export const live = <T>(stack: UndoEntry<T>[], now: number) => stack.filter((e) => e.until > now);
+export const popUndo = <T>(stack: UndoEntry<T>[], now: number): { entry: UndoEntry<T> | null; rest: UndoEntry<T>[] } => {
+  const l = live(stack, now);
+  return { entry: l.at(-1) ?? null, rest: l.slice(0, -1) };
+};
 export const ANSWERS = ["yes", "later", "no"] as const;
 export type InboxAnswer = (typeof ANSWERS)[number];
 export const asAnswer = (s: unknown): InboxAnswer | null => ((ANSWERS as readonly unknown[]).includes(s) ? (s as InboxAnswer) : null);
