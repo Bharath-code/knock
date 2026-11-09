@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { hc } from "hono/client";
-import { CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, LogOut, Settings as SettingsIcon } from "lucide-react";
+import { CheckCheck, DoorClosed, ExternalLink, Inbox as InboxIcon, LogOut, Settings as SettingsIcon, MessageCircle } from "lucide-react";
 import { StrictMode, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
@@ -498,9 +498,9 @@ const App = () => {
               Inbox{open > 0 && <Badge className="h-5 min-w-5 rounded-full px-1.5 tabular">{open}</Badge>}
             </a>
             <a href="/app/settings" onClick={go("/app/settings")} aria-current={settings ? "page" : undefined} className={tab}>
-              <SettingsIcon className="size-4" aria-hidden />Settings
+              <SettingsIcon className="size-4" aria-hidden /><span className="max-sm:sr-only">Settings</span>
             </a>
-            <a href={`/feedback?from=${encodeURIComponent(location.pathname)}`} className={tab}>Talk to Bharath</a>
+            <a href={`/feedback?from=${encodeURIComponent(location.pathname)}`} className={tab}><MessageCircle className="size-4 sm:hidden" aria-hidden /><span className="max-sm:sr-only">Talk to Bharath</span></a>
           </nav>
           {!settings && open > 0 && (
             <AlertDialog>
