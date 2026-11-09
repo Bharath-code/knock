@@ -4,6 +4,8 @@ import css from "../styles/theme.css?url";
 import { alert, button as btn, card, hint, input, label, notice } from "../shared/ui";
 import { RETAIN_DAYS } from "./retention";
 import { ownDoorPath, REF_LINE, STARTER, type Ref } from "../shared/growth";
+import { CHANGELOG } from "../shared/changelog";
+import { FAQ } from "../shared/faq";
 import { answerRate, defaultFields, replyLine, templates, WINDOWS, type Template } from "../shared/door";
 import type { DoorView, Owner } from "./doors";
 import { KnockFormView, StatusBody, type KnockForm } from "./knock-pages";
@@ -56,6 +58,8 @@ export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, c
           <span>Doorbell. Every knock gets an answer.</span>
           <span class="flex gap-4">
             <a href="/feedback" class="text-muted-foreground hover:text-foreground">Talk to Bharath</a>
+            <a href="/faq" class="text-muted-foreground hover:text-foreground">FAQ</a>
+            <a href="/changelog" class="text-muted-foreground hover:text-foreground">Changelog</a>
             <a href="/privacy" class="text-muted-foreground hover:text-foreground">Privacy</a>
           </span>
         </p>
@@ -327,5 +331,37 @@ export const PrivacyPage = () => (
         ))}
       </dl>
     </section>
+  </Shell>
+);
+
+export const FaqPage = () => (
+  <Shell title="FAQ | Doorbell" description="Answers to the questions people ask most about Doorbell.">
+    <h1 class="text-3xl">FAQ</h1>
+    <p class="mt-3 text-lg text-muted-foreground">Short answers. If yours is not here, <a href="/feedback">Talk to Bharath</a>.</p>
+    <dl class="mt-10 space-y-8">
+      {FAQ.map((f) => (
+        <div>
+          <dt class="text-xl font-semibold">{f.q}</dt>
+          <dd class="mt-2 text-muted-foreground">{f.a}</dd>
+        </div>
+      ))}
+    </dl>
+  </Shell>
+);
+
+export const ChangelogPage = () => (
+  <Shell title="Changelog | Doorbell" description="Everything that has shipped, newest first.">
+    <h1 class="text-3xl">Changelog</h1>
+    <p class="mt-3 text-lg text-muted-foreground">What shipped, newest first.</p>
+    <div class="mt-10 space-y-10">
+      {CHANGELOG.map((r) => (
+        <section>
+          <h2 class="text-xl"><time datetime={r.date} class="mr-2 font-mono text-sm text-muted-foreground">{r.date}</time>{r.title}</h2>
+          <ul class="mt-3 list-disc space-y-2 pl-5 text-muted-foreground">
+            {r.points.map((p) => <li>{p}</li>)}
+          </ul>
+        </section>
+      ))}
+    </div>
   </Shell>
 );
