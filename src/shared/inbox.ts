@@ -1,3 +1,4 @@
+import type { Chip } from "./chips";
 export const UNDO_MS = 5_000;
 export const ANSWERS = ["yes", "later", "no"] as const;
 export type InboxAnswer = (typeof ANSWERS)[number];
@@ -23,6 +24,7 @@ export type InboxCard = {
   fit: number | null;
   spam: boolean;
   rewrote: boolean;
+  chips: Chip[];
   createdAt: number;
   expiresAt: number;
 };

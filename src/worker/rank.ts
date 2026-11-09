@@ -2,11 +2,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { check } from "../shared/checker";
+import type { Chip } from "../shared/chips";
 import { costUsd, failureFrom, fitBand, MODEL, type ModelFailure } from "./model";
 
 export type RankInput = { post: string; answers: { q: string; a: string }[]; message: string; proof: string | null };
 export type Bucket = "strong" | "maybe" | "weak" | "spam";
-export type Rank = { fit: number; spam: boolean; bucket: Bucket; ranker: string; evidence: string[] };
+export type Rank = { fit: number; spam: boolean; bucket: Bucket; ranker: string; evidence: string[]; chips: Chip[] };
 export type RankOutcome = { ok: true; rank: Rank } | { ok: false; reason: ModelFailure };
 export type Ranker = { name: string; rank: (input: RankInput) => Promise<RankOutcome> };
 
@@ -68,7 +69,7 @@ export const rulesRanker: Ranker = {
     const r = check(c.message);
     const passes = [r.length.ok, r.numbers.ok, r.link.ok || !!c.proof, r.ask.ok, r.typos.ok].filter(Boolean).length;
     const fit = passes >= 4 ? 4 : passes === 3 ? 3 : passes === 2 ? 2 : 1;
-    return { ok: true, rank: { fit, spam: false, bucket: bucketOf(fit, false), ranker: "rules", evidence: c.injected ? ["Removed text that tried to instruct the scorer"] : [] } };
+    return { ok: true, rank: { fit, spam: false, bucket: bucketOf(fit, false), ranker: "rules", evidence: c.injected ? ["Removed text that tried to instruct the scorer"] : [], chips: c.proof ? [{ label: "Has a proof link", quote: c.proof }] : [] } };
   },
 };
 
@@ -86,9 +87,9 @@ If the post is empty, score how clear, specific and well-supported the request i
 
 spam is true only for promotion, scams, mass-sent messages unrelated to the post, or abuse. A weak or vague but genuine request is not spam.
 
-evidence: up to 3 short facts taken from the knock that explain the score, each under 80 characters. Empty if there are none.`;
+evidence: up to 3 items that explain the score. Each item has "chip", a label under 30 characters such as "8 years at Stripe", and "quote", the exact words from the knock that support it, copied character for character, under 80 characters, taken from the message, an answer or the proof link. Include an item only if you can quote the knock for it. Empty if there are none.`;
 
-const outputSchema = z.object({ fit: z.number().int(), spam: z.boolean(), evidence: z.array(z.string()) });
+const outputSchema = z.object({ fit: z.number().int(), spam: z.boolean(), evidence: z.array(z.object({ chip: z.string(), quote: z.string() })) });
 
 const nonce = () => [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -118,9 +119,12 @@ export const haikuRanker = (client: Pick<Anthropic, "messages">): Ranker => ({
       const p = res.parsed_output;
       if (res.stop_reason === "refusal") outcome = { ok: false, reason: "refusal" };
       else if (res.stop_reason === "max_tokens") outcome = { ok: false, reason: "truncated" };
-      else if (p && p.fit >= 1 && p.fit <= 5) {
-        const evidence = [...p.evidence.slice(0, 3).map((e) => sanitize(e, 80)), ...(c.injected ? ["Removed text that tried to instruct the scorer"] : [])];
-        outcome = { ok: true, rank: { fit: p.fit, spam: p.spam, bucket: bucketOf(p.fit, p.spam), ranker: "haiku", evidence } };
+      // A spam verdict decides the bucket on its own, so an out-of-range fit alongside it is clamped, not rejected.
+      else if (p && (p.spam || (p.fit >= 1 && p.fit <= 5))) {
+        const fit = Math.min(5, Math.max(1, p.fit));
+        const evidence = c.injected ? ["Removed text that tried to instruct the scorer"] : [];
+        const chips = p.evidence.slice(0, 3).map((e) => ({ label: sanitize(e.chip, 40), quote: sanitize(e.quote, 80) }));
+        outcome = { ok: true, rank: { fit, spam: p.spam, bucket: bucketOf(fit, p.spam), ranker: "haiku", evidence, chips } };
       }
     } catch (e) {
       outcome = { ok: false, reason: failureFrom(e) };
@@ -172,6 +176,6 @@ export const saveRank = async (db: D1Database, knockId: string, r: Rank) =>
   ((
     await db
       .prepare("UPDATE knocks SET fit = ?2, spam = ?3, bucket = ?4, evidence_json = ?5 WHERE id = ?1 AND fit IS NULL AND status IN ('new', 'seen')")
-      .bind(knockId, r.fit, r.spam ? 1 : 0, r.bucket, JSON.stringify({ ranker: r.ranker, evidence: r.evidence }))
+      .bind(knockId, r.fit, r.spam ? 1 : 0, r.bucket, JSON.stringify({ ranker: r.ranker, evidence: r.evidence, chips: r.chips }))
       .run()
   ).meta.changes ?? 0) > 0;
