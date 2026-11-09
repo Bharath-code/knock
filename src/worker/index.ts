@@ -11,10 +11,11 @@ import { CheckerPage } from "./checker-page";
 import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
 import { asKnockId, asRef, asTemplate } from "../shared/growth";
-import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
+import { seenJobs, seenOff, stillSeen, type SeenJob } from "./seen";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
-import { ConfirmPage, SigninPage, UnsubscribePage } from "./auth-pages";
+import { ConfirmPage, SeenOffPage, SigninPage, UnsubscribePage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { closeExpired, notifyExpired } from "./expire";
@@ -97,7 +98,15 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
   })
   .get("/", async (c) => {
     const seen = await markSeen(c.env.DB, c.get("owner"));
-    if (seen.length) track(c.env.FUNNEL, "seen", "", "", seen.length);
+    if (seen.length) {
+      track(c.env.FUNNEL, "seen", "", "", seen.length);
+      try {
+        const jobs = await seenJobs(c.env.DB, seen);
+        for (let i = 0; i < jobs.length; i += 100) await c.env.JOBS.sendBatch(jobs.slice(i, i + 100).map((body) => ({ body })));
+      } catch (e) {
+        console.error("seen enqueue failed", e instanceof Error ? e.message : e);
+      }
+    }
     return c.json(await listInbox(c.env.DB, c.get("owner")));
   })
   .post(
@@ -315,6 +324,15 @@ const app = new Hono<AppEnv>()
     c.header("cache-control", "private, no-store");
     const ok = await unsubscribe(c.env.DB, c.req.param("token"));
     return c.html(UnsubscribePage({ token: c.req.param("token"), valid: ok, done: ok }), ok ? 200 : 404);
+  })
+  .get("/u/:token/seen", async (c) => {
+    c.header("cache-control", "private, no-store");
+    return c.html(SeenOffPage({ token: c.req.param("token"), valid: await tokenValid(c.env.DB, c.req.param("token")) }));
+  })
+  .post("/u/:token/seen", async (c) => {
+    c.header("cache-control", "private, no-store");
+    const ok = await seenOff(c.env.DB, c.req.param("token"));
+    return c.html(SeenOffPage({ token: c.req.param("token"), valid: ok, done: ok }), ok ? 200 : 404);
   })
   .get("/signin", (c) => c.html(SigninPage({ siteKey: c.env.TURNSTILE_SITE_KEY })))
   .post("/signin", async (c) => {
@@ -560,6 +578,22 @@ export default {
           message.ack();
         } catch (e) {
           console.error("digest failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 60 });
+        }
+        continue;
+      }
+      if (job.type === "seen") {
+        const s = message.body as SeenJob;
+        const origin = (env as Secrets).PUBLIC_ORIGIN;
+        try {
+          if (!origin) throw new Error("PUBLIC_ORIGIN missing");
+          if (await stillSeen(env.DB, s.knockId)) {
+            const sent = await sendSeen(env as Secrets, { to: s.to, who: s.who, off: new URL(`/u/${s.token}/seen`, origin).href, k: s.knockId });
+            if (sent === "unconfigured") console.warn("seen not sent: RESEND_API_KEY or EMAIL_FROM missing");
+          }
+          message.ack();
+        } catch (e) {
+          console.error("seen failed", e instanceof Error ? e.message : e);
           message.retry({ delaySeconds: 60 });
         }
         continue;

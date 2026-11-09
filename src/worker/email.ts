@@ -62,7 +62,27 @@ export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fe
   return "sent";
 };
 
-export type SignIn = { to: string; link: string; handle?: string | null };
+export type Seen = { to: string; who: string; off: string; k?: string };
+
+export const sendSeen = async (env: MailEnv, raw: Seen, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
+  const who = stripLinks(raw.who);
+  const res = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: raw.to,
+      subject: `${who} saw your knock`,
+      text: `${who} just opened your knock. They promised an answer, and you'll get an email as soon as they reply.\n\nYou get this once per knock. Turn it off: ${raw.off}${talk(env)}${ownDoor(env, raw.k)}`,
+      headers: { "List-Unsubscribe": `<${raw.off}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+    }),
+  });
+  if (!res.ok) throw new Error(`email provider ${res.status}`);
+  return "sent";
+};
+
+export type SignIn ={ to: string; link: string; handle?: string | null };
 
 export const sendSignIn = async (env: MailEnv, r: SignIn, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";

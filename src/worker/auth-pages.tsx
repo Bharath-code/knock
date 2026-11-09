@@ -71,7 +71,25 @@ export const ConfirmPage = ({ token, error, link }: { token: string; error?: str
   </Shell>
 );
 
-export const UnsubscribePage = ({ token, valid, done }: { token: string; valid: boolean; done?: boolean }) => (
+export const SeenOffPage = ({ token, valid, done }: { token: string; valid: boolean; done?: boolean }) => (
+  <Shell title="Seen alerts | Doorbell" description="Turn off Seen alerts." head={<meta name="robots" content="noindex, nofollow" />}>
+    <h1 class="text-3xl">{done ? "Seen alerts are off" : "Turn off Seen alerts?"}</h1>
+    {!valid ? (
+      <p role="alert" class={`mt-6 ${alert}`}>This link is not valid.</p>
+    ) : done ? (
+      <p class="mt-3 text-lg text-muted-foreground">You won't get an email when someone opens your knock. You still get their answer.</p>
+    ) : (
+      <>
+        <p class="mt-3 text-lg text-muted-foreground">You'll stop getting an email when someone opens your knock. You still get their answer.</p>
+        <form method="post" action={`/u/${token}/seen`} class="mt-8">
+          <button class={button}>Turn off Seen alerts</button>
+        </form>
+      </>
+    )}
+  </Shell>
+);
+
+export const UnsubscribePage =({ token, valid, done }: { token: string; valid: boolean; done?: boolean }) => (
   <Shell title="Daily digest | Doorbell" description="Turn off the daily digest." head={<meta name="robots" content="noindex, nofollow" />}>
     <h1 class="text-3xl">{done ? "You're unsubscribed" : "Turn off the daily digest?"}</h1>
     {!valid ? (
