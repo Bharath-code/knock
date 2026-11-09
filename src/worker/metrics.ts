@@ -44,7 +44,7 @@ export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Met
     db.prepare("SELECT COUNT(DISTINCT owner_user_id) n FROM doors"),
     db.prepare("SELECT COUNT(*) total, COALESCE(SUM(answer <> 'expired'), 0) answered FROM decisions WHERE answer IN ('yes','later','no','expired') AND at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT COUNT(*) knocks, COUNT(DISTINCT door_id) doors FROM knocks WHERE created_at >= ?1").bind(now - PERIOD),
-    db.prepare("SELECT COUNT(*) n FROM outcomes WHERE at >= ?1").bind(now - PERIOD),
+    db.prepare("SELECT COUNT(DISTINCT knock_id) n FROM outcomes WHERE type <> 'none' AND at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT first_door_secs s FROM doors WHERE first_door_secs IS NOT NULL ORDER BY created_at DESC LIMIT 5"),
     db.prepare("SELECT COUNT(*) doors, COALESCE(SUM(from_sender), 0) former FROM doors"),
   ]);

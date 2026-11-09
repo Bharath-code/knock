@@ -11,12 +11,13 @@ import { CheckerPage } from "./checker-page";
 import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
 import { asKnockId, asRef, asTemplate } from "../shared/growth";
-import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { sendClosure, sendDigest, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
+import { checkinView, dueCheckins, recordOutcome, type CheckinJob } from "./checkin";
 import { dueReminders, REMIND_MS, type ReminderJob } from "./reminders";
 import { seenJobs, seenOff, stillSeen, type SeenJob } from "./seen";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
-import { ConfirmPage, SeenOffPage, SigninPage, UnsubscribePage } from "./auth-pages";
+import { ConfirmPage, OutcomePage, SeenOffPage, SigninPage, UnsubscribePage } from "./auth-pages";
 import { bookingUrl, YES_DELAY_S } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { closeExpired, notifyExpired } from "./expire";
@@ -326,6 +327,21 @@ const app = new Hono<AppEnv>()
     const ok = await unsubscribe(c.env.DB, c.req.param("token"));
     return c.html(UnsubscribePage({ token: c.req.param("token"), valid: ok, done: ok }), ok ? 200 : 404);
   })
+  .get("/o/:token", async (c) => {
+    c.header("cache-control", "private, no-store");
+    const view = await checkinView(c.env.DB, c.req.param("token"));
+    return c.html(OutcomePage({ token: c.req.param("token"), view }), view ? 200 : 404);
+  })
+  .post("/o/:token", async (c) => {
+    c.header("cache-control", "private, no-store");
+    const token = c.req.param("token");
+    const form = await c.req.parseBody();
+    const happened = form.happened === "1";
+    const r = await recordOutcome(c.env.DB, token, happened);
+    if (r === "ok") track(c.env.FUNNEL, "outcome", happened ? "yes" : "none", "");
+    const view = await checkinView(c.env.DB, token);
+    return c.html(OutcomePage({ token, view, done: r !== "invalid" }), r === "invalid" ? 404 : 200);
+  })
   .get("/u/:token/seen", async (c) => {
     c.header("cache-control", "private, no-store");
     return c.html(SeenOffPage({ token: c.req.param("token"), valid: await tokenValid(c.env.DB, c.req.param("token")) }));
@@ -583,6 +599,20 @@ export default {
         }
         continue;
       }
+      if (job.type === "checkin") {
+        const ck = message.body as CheckinJob;
+        const origin = (env as Secrets).PUBLIC_ORIGIN;
+        try {
+          if (!origin) throw new Error("PUBLIC_ORIGIN missing");
+          const sent = await sendCheckin(env as Secrets, { to: ck.to, side: ck.side, who: ck.who, about: ck.about, link: new URL(`/o/${ck.token}`, origin).href });
+          if (sent === "unconfigured") console.warn("checkin not sent: RESEND_API_KEY or EMAIL_FROM missing");
+          message.ack();
+        } catch (e) {
+          console.error("checkin failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 60 });
+        }
+        continue;
+      }
       if (job.type === "reminder") {
         const r = message.body as ReminderJob;
         const origin = (env as Secrets).PUBLIC_ORIGIN;
@@ -642,6 +672,8 @@ export default {
     await pruneAuth(env.DB);
     await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
     for (const f of await purgeClosed(env.DB)) await env.DOOR.getByName(f.doorId).forget(f.key).catch((e) => console.error("forget failed", e instanceof Error ? e.message : e));
+    const checkins = await dueCheckins(env.DB, Date.now());
+    for (let i = 0; i < checkins.length; i += 100) await env.JOBS.sendBatch(checkins.slice(i, i + 100).map((body) => ({ body })));
     const reminders = await dueReminders(env.DB, Date.now());
     for (let i = 0; i < reminders.length; i += 100) await env.JOBS.sendBatch(reminders.slice(i, i + 100).map((body) => ({ body })));
     const digests = await digestJobs(env.DB);
