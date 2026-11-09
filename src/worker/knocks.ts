@@ -53,6 +53,7 @@ export type Status = {
   who: string;
   title: string;
   createdAt: number;
+  id: string;
   seenAt: number | null;
   answeredAt: number | null;
   answer: string | null;
@@ -62,7 +63,7 @@ export type Status = {
 export const getStatus = async (db: D1Database, token: string): Promise<Status | null> => {
   const r = await db
     .prepare(
-      `SELECT p.handle, p.display_name, d.kind, d.post_text, k.created_at, k.seen_at, k.answered_at, k.expires_at,
+      `SELECT k.id, p.handle, p.display_name, d.kind, d.post_text, k.created_at, k.seen_at, k.answered_at, k.expires_at,
               (SELECT answer FROM decisions WHERE knock_id = k.id ORDER BY at DESC LIMIT 1) AS answer
        FROM knocks k JOIN doors d ON d.id = k.door_id JOIN users u ON u.id = d.owner_user_id JOIN people p ON p.id = u.person_id
        WHERE k.token_hash = ?`,
@@ -70,13 +71,13 @@ export const getStatus = async (db: D1Database, token: string): Promise<Status |
     .bind(await sha256(token))
     .first<{
       handle: string; display_name: string | null; kind: string; post_text: string | null;
-      created_at: number; seen_at: number | null; answered_at: number | null; expires_at: number; answer: string | null;
+      id: string; created_at: number; seen_at: number | null; answered_at: number | null; expires_at: number; answer: string | null;
     }>();
   return r
     ? {
         who: r.display_name || `@${r.handle}`,
         title: r.kind === "profile" ? `@${r.handle}'s door` : (r.post_text ?? "").split("\n")[0]!.slice(0, 70),
-        createdAt: r.created_at, seenAt: r.seen_at, answeredAt: r.answered_at, answer: r.answer, expiresAt: r.expires_at,
+        id: r.id, createdAt: r.created_at, seenAt: r.seen_at, answeredAt: r.answered_at, answer: r.answer, expiresAt: r.expires_at,
       }
     : null;
 };

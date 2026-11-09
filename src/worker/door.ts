@@ -3,7 +3,7 @@ import { admit, initAdmit, release } from "./admit";
 import { closeExpired, nextExpiry, notifyExpired } from "./expire";
 import { writeKnock, type KnockWrite } from "./knocks";
 
-export type KnockResult = { ok: true; token: string } | { ok: false; reason: "duplicate" | "limited" };
+export type KnockResult = { ok: true; token: string; id: string } | { ok: false; reason: "duplicate" | "limited" };
 
 export class Door extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -60,7 +60,7 @@ export class Door extends DurableObject<Env> {
       await this.env.JOBS.send({ type: "rank", knockId: id, doorId: k.doorId }).catch((e) => console.error("rank enqueue failed", e instanceof Error ? e.message : e));
       await this.rearm().catch((e) => console.error("rearm failed", e instanceof Error ? e.message : e));
       this.announce();
-      return { ok: true, token };
+      return { ok: true, token, id };
     } catch (e) {
       // D1's unique (door, person) is the backstop if this Door's memory ever misses a sender
       if (e instanceof Error && /UNIQUE constraint failed: knocks\./.test(e.message)) return { ok: false, reason: "duplicate" };

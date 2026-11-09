@@ -19,7 +19,7 @@ const Mark = () => (
 );
 
 const swapScript = `document.querySelectorAll('[data-use]').forEach(function(b){var t=document.getElementById(b.dataset.use),r=document.getElementById(b.dataset.from),old=null;b.hidden=false;b.addEventListener('click',function(){if(old===null){old=t.value;t.value=r.value;b.textContent='Undo';t.focus()}else{t.value=old;old=null;b.textContent='Use this version'}})})`;
-export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, children }: { title: string; description: string; head?: Child; wide?: boolean; copy?: boolean; swap?: boolean; poweredBy?: { from: Ref; t?: string }; children: Child }) => (
+export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, children }: { title: string; description: string; head?: Child; wide?: boolean; copy?: boolean; swap?: boolean; poweredBy?: { from: Ref; t?: string; k?: string }; children: Child }) => (
   <html lang="en">
     <head>
       <meta charset="UTF-8" />
@@ -47,7 +47,7 @@ export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, c
             <p class="text-sm">
               <span class="font-medium">Powered by Doorbell.</span> <span class="text-muted-foreground">Get every request answered on your own posts.</span>
             </p>
-            <a href={ownDoorPath(poweredBy.from, poweredBy.t)} class={btn({ variant: "outline" })}>Make your own door</a>
+            <a href={ownDoorPath(poweredBy.from, poweredBy.t, poweredBy.k)} class={btn({ variant: "outline" })}>Make your own door</a>
           </div>
         </aside>
       )}
@@ -71,6 +71,7 @@ const field = `${input} mt-1.5`;
 
 export type NewState = {
   ref?: Ref | null;
+  k?: string | null;
   starter?: Template | null;
   owner: Owner | null;
   siteKey?: string;
@@ -83,7 +84,7 @@ export type NewState = {
   error?: string;
 };
 
-export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", template, fields, window = 7, error, ref, starter }: NewState) => {
+export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", template, fields, window = 7, error, ref, k, starter }: NewState) => {
   post ??= starter ? STARTER[starter] : "";
   const step2 = template !== undefined;
   const widget = siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="new" />;
@@ -104,6 +105,7 @@ export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", temp
       {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
       <form method="post" action="/new" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
         {ref && <input type="hidden" name="ref" value={ref} />}
+        {k && <input type="hidden" name="k" value={k} />}
         {!owner?.handle && (
           <div class="grid gap-6 sm:grid-cols-2">
             <div>
@@ -261,7 +263,7 @@ export const NotFoundDoor = () => (
 );
 
 export const StatusPage = ({ s, link, token }: { s: Status; link: string; token: string }) => (
-  <Shell title="Your knock | Doorbell" description="Status of your knock." head={<meta name="robots" content="noindex, nofollow" />} poweredBy={{ from: "status" }}>
+  <Shell title="Your knock | Doorbell" description="Status of your knock." head={<meta name="robots" content="noindex, nofollow" />} poweredBy={{ from: "status", k: s.id }}>
     <StatusBody s={s} link={link} />
     <details class="group mt-10 border-t pt-6">
       <summary class="cursor-pointer text-sm text-muted-foreground transition-colors hover:text-foreground">Delete my knock</summary>

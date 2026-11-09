@@ -20,7 +20,9 @@ export const ownerFromToken = async (db: D1Database, token: string | undefined, 
 
 export type Made = { ok: true; slug: string; handle: string; token?: string } | { ok: false; error: string };
 
-export const createDoor = async (db: D1Database, input: CreateDoor, token: string | undefined, startedAt?: number): Promise<Made> => {
+// fromKnock: the knock whose status page or email led here. A stale or forged id stores NULL, so it can't break the foreign key.
+// ponytail: a forged id only inflates the former-sender metric; tie it to the sender's email if that ever matters
+export const createDoor = async (db: D1Database, input: CreateDoor, token: string | undefined, startedAt?: number, fromKnock: string | null = null): Promise<Made> => {
   const now = Date.now();
   const hash = token ? await sha256(token) : null;
   const mine = hash
@@ -64,9 +66,11 @@ export const createDoor = async (db: D1Database, input: CreateDoor, token: strin
   const door = (slug: string, kind: string, template: string, post: string, fields: string[], window: number) =>
     db
       .prepare(
-        "INSERT INTO doors (id, org_id, owner_user_id, slug, kind, template, post_text, fields_json, window_days, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+        `INSERT INTO doors (id, org_id, owner_user_id, slug, kind, template, post_text, fields_json, window_days, created_at, created_from_knock_id, from_sender)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10, (SELECT id FROM knocks WHERE id = ?11),
+           EXISTS (SELECT 1 FROM knocks WHERE id = ?11) OR EXISTS (SELECT 1 FROM knocks WHERE person_id = ?12))`,
       )
-      .bind(crypto.randomUUID(), ids.org_id, ids.user_id, slug, kind, template, post || null, JSON.stringify(fields), window, now);
+      .bind(crypto.randomUUID(), ids.org_id, ids.user_id, slug, kind, template, post || null, JSON.stringify(fields), window, now, fromKnock, ids.person_id);
 
   if (!existing) {
     stmts.push(

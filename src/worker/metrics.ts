@@ -33,21 +33,25 @@ export type D1Metrics = {
   knocksPerActiveDoor: number | null;
   outcomes: number;
   knocks: number;
+  doors: number;
+  fromSenderShare: number | null;
 };
 
 // Truth comes from D1, not events: undo deletes the decision row, so nothing double-counts.
 export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Metrics> => {
-  const [ns, rec, closed, k, out, fd] = await db.batch([
+  const [ns, rec, closed, k, out, fd, fs] = await db.batch([
     db.prepare("SELECT COUNT(*) n FROM decisions WHERE answer IN ('yes','later','no') AND at >= ?1").bind(now - WEEK),
     db.prepare("SELECT COUNT(DISTINCT owner_user_id) n FROM doors"),
     db.prepare("SELECT COUNT(*) total, COALESCE(SUM(answer <> 'expired'), 0) answered FROM decisions WHERE answer IN ('yes','later','no','expired') AND at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT COUNT(*) knocks, COUNT(DISTINCT door_id) doors FROM knocks WHERE created_at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT COUNT(*) n FROM outcomes WHERE at >= ?1").bind(now - PERIOD),
     db.prepare("SELECT first_door_secs s FROM doors WHERE first_door_secs IS NOT NULL ORDER BY created_at DESC LIMIT 5"),
+    db.prepare("SELECT COUNT(*) doors, COALESCE(SUM(from_sender), 0) former FROM doors"),
   ]);
   const one = <T,>(r: unknown) => ((r as D1Result<T>).results[0] ?? {}) as T;
   const c = one<{ total: number; answered: number }>(closed);
   const kk = one<{ knocks: number; doors: number }>(k);
+  const f = one<{ doors: number; former: number }>(fs);
   return {
     firstDoor: firstDoorStats(((fd as D1Result<{ s: number }>).results ?? []).map((r) => r.s)),
     northStar: one<{ n: number }>(ns).n ?? 0,
@@ -56,6 +60,8 @@ export const d1Metrics = async (db: D1Database, now = Date.now()): Promise<D1Met
     knocksPerActiveDoor: kk.doors ? kk.knocks / kk.doors : null,
     outcomes: one<{ n: number }>(out).n ?? 0,
     knocks: kk.knocks ?? 0,
+    doors: f.doors ?? 0,
+    fromSenderShare: f.doors ? f.former / f.doors : null,
   };
 };
 

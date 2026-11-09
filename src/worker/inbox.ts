@@ -134,12 +134,12 @@ export const closeRest = async (db: D1Database, o: OwnerUser, now = Date.now()):
   if (!done[1]?.meta.changes) return [];
   const { results } = await db
     .prepare(
-      `SELECT p.email AS "to" FROM decisions d JOIN knocks k ON k.id = d.knock_id JOIN people p ON p.id = k.person_id
+      `SELECT p.email AS "to", k.id AS k FROM decisions d JOIN knocks k ON k.id = d.knock_id JOIN people p ON p.id = k.person_id
        WHERE d.actor_user_id = ?1 AND d.reason_code = ?2 AND d.at = ?3`,
     )
     .bind(o.userId, CLOSE_REASON, now)
-    .all<{ to: string }>();
-  return results.map((r) => ({ to: r.to, message: CLOSE_MESSAGE }));
+    .all<{ to: string; k: string }>();
+  return results.map((r) => ({ to: r.to, message: CLOSE_MESSAGE, k: r.k }));
 };
 
 export const ownerDoorIds = async (db: D1Database, o: OwnerUser): Promise<string[]> =>

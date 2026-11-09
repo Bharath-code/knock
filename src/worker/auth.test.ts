@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
+import { d1Metrics } from "./metrics";
 import { emailKey } from "../shared/knock";
 import { confirmLink, deviceLabel, IDLE_MS, LINK_MS, peekLink, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
 import { createDoor, ownerFromToken, sha256 } from "./doors";
 import { ownerUser } from "./inbox";
 import { fakeDb } from "./testdb";
+import { deleteByToken } from "./retention";
 
 const input = (handle: string, post = "") => ({ handle, name: "Newbie", post, template: "referral" as const, fields: ["-"], window: 7 as const });
 
@@ -101,10 +103,62 @@ test("attaching an email to an anonymous owner follows the person fixed at reque
 
   expect(await claim("anon", "other@x.com")).toEqual({ ok: false, error: "This account already has an email." });
   expect(await claim("anon2", "me@x.com")).toEqual({ ok: false, error: "That email already has an account. Sign in with it instead." });
-  sqlite.run(`INSERT INTO people (id, email, email_hash, created_at) VALUES ('snd', 'k@x.com', '${await sha256(emailKey("k@x.com"))}', 1)`);
+  sqlite.run(`INSERT INTO people (id, email, email_hash, created_at) VALUES ('snd', 'k+jobs@x.com', '${await sha256(emailKey("k@x.com"))}', 1)`);
   const refused = await claim("anon2", "k@x.com");
   expect(refused.ok).toBe(false);
   expect(sqlite.query("SELECT email FROM people WHERE id = 'anon2'").get()).toEqual({ email: "anon2@anon.doorbell.invalid" });
+});
+
+test("claiming the exact address a sender knocked from merges their knocks; an alias does not", async () => {
+  const { db, sqlite } = await fakeDb();
+  sqlite.run("PRAGMA foreign_keys = ON");
+  const h = await sha256(emailKey("k@x.com"));
+  sqlite.run(`INSERT INTO orgs VALUES ('o','o','free',1);
+    INSERT INTO people (id, email, email_hash, handle, created_at) VALUES ('anon','anon@anon.doorbell.invalid','h-anon','anon',1), ('rcv','r@x.com','h-r','rcv',1);
+    INSERT INTO users VALUES ('u','o','anon','owner',1), ('ur','o','rcv','owner',1);
+    INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('d','o','ur','profile','profile','profile','[]',1), ('mine','o','u','profile','profile','profile','[]',50);
+    INSERT INTO people (id, email, email_hash, created_at) VALUES ('snd','k@x.com','${h}',1);
+    INSERT INTO person_stats (person_id, knocks_sent, updated_at) VALUES ('snd', 1, 1);
+    INSERT INTO knocks (id,org_id,door_id,person_id,answers_json,token_hash,consent_at,source,created_at,expires_at) VALUES ('k1','o','d','snd','{}','t1',1,'bio',10,99);`);
+
+  const ok = await confirmLink(db, await requestLink(db, "k@x.com", "anon"), Date.now());
+  expect(ok.ok).toBe(true);
+  expect(sqlite.query("SELECT person_id FROM knocks WHERE id = 'k1'").get()).toEqual({ person_id: "anon" });
+  expect(sqlite.query("SELECT person_id, knocks_sent FROM person_stats").all()).toEqual([{ person_id: "anon", knocks_sent: 1 }]);
+  expect(sqlite.query("SELECT id FROM people WHERE id = 'snd'").get()).toBeNull();
+  expect(sqlite.query("SELECT email FROM people WHERE id = 'anon'").get()).toEqual({ email: "k@x.com" });
+  expect(sqlite.query("SELECT from_sender FROM doors WHERE id = 'mine'").get()).toEqual({ from_sender: 1 });
+
+  // The owner now owns a knock; deleting it must not cascade away their account and doors.
+  sqlite.run(`UPDATE knocks SET token_hash = '${await sha256("tok1")}' WHERE id = 'k1'`);
+  expect(await deleteByToken(db, "tok1")).not.toBeNull();
+  expect(sqlite.query("SELECT COUNT(*) n FROM users WHERE person_id = 'anon'").get()).toEqual({ n: 1 });
+  expect(sqlite.query("SELECT id FROM doors WHERE id = 'mine'").get()).toEqual({ id: "mine" });
+});
+
+test("a door made from a knock's link stores it; a door by someone who knocked before is flagged; a forged id stores nothing", async () => {
+  const { db, sqlite } = await fakeDb();
+  sqlite.run("PRAGMA foreign_keys = ON");
+  const k = "0b1c2d3e-4f50-4617-8899-aabbccddeeff";
+  sqlite.run(`INSERT INTO orgs VALUES ('o','o','free',1); INSERT INTO people (id,email,email_hash,handle,created_at) VALUES ('r','r@x.com','hr','rcv',1), ('s','s@x.com','${await sha256(emailKey("s@x.com"))}',NULL,1);
+    INSERT INTO users VALUES ('ur','o','r','owner',1);
+    INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('d','o','ur','profile','profile','profile','[]',1);
+    INSERT INTO knocks (id,org_id,door_id,person_id,answers_json,token_hash,consent_at,source,created_at,expires_at) VALUES ('${k}','o','d','s','{}','t',1,'bio',1,9e12);`);
+
+  await createDoor(db, input("fromlink"), undefined, undefined, k);
+  await createDoor(db, input("forged"), undefined, undefined, "11111111-2222-4333-8444-555555555555");
+  await createDoor(db, input("plain"), undefined);
+  const sender = await signIn(db, "s@x.com");
+  await createDoor(db, input("former"), sender);
+
+  const rows = sqlite.query("SELECT p.handle, d.created_from_knock_id k, d.from_sender f FROM doors d JOIN users u ON u.id = d.owner_user_id JOIN people p ON p.id = u.person_id WHERE d.id <> 'd' ORDER BY p.handle").all();
+  expect(rows).toEqual([
+    { handle: "forged", k: null, f: 0 },
+    { handle: "former", k: null, f: 1 },
+    { handle: "fromlink", k, f: 1 },
+    { handle: "plain", k: null, f: 0 },
+  ]);
+  expect((await d1Metrics(db)).fromSenderShare).toBe(2 / 5);
 });
 
 test("creating a door while signed in claims the handle, and a taken handle is refused", async () => {

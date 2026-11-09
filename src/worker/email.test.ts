@@ -106,4 +106,9 @@ test("sender emails end with the own-door link only when the public origin is se
   expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
   await sendReceipt({ ...env, PUBLIC_ORIGIN: undefined }, r, reply(200, seen));
   expect(JSON.parse(seen.body!).text).not.toContain("/go/door");
+  const id = "0b1c2d3e-4f50-4617-8899-aabbccddeeff";
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "No.", k: id }, reply(200, seen));
+  expect(JSON.parse(seen.body!).text.endsWith(`${tail}&k=${id}`)).toBe(true);
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "No.", k: "bad id&x=1" }, reply(200, seen));
+  expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
 });
