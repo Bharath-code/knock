@@ -1,4 +1,9 @@
+import { render } from "@react-email/render";
 import { ownDoorPath } from "../shared/growth";
+import { Closure as ClosureEmail } from "./emails/Closure";
+import { Digest as DigestEmail } from "./emails/Digest";
+import { Receipt as ReceiptEmail } from "./emails/Receipt";
+import { Yes as YesEmail } from "./emails/Yes";
 
 // k: the knock the email is about, carried into the own-door link for attribution. Optional so queued jobs still send.
 export type Receipt = { to: string; link: string; who: string; days: number; k?: string };
@@ -11,6 +16,11 @@ const ownDoor = (env: MailEnv, k?: string) => (env.PUBLIC_ORIGIN ? `\n\n—\nGet
 // Every email that isn't a security notice ends with the direct line to the founder.
 const talk = (env: MailEnv) => (env.PUBLIC_ORIGIN ? `\n\nQuestion or problem? Talk to Bharath, I reply within 24 hours: ${new URL("/feedback?from=email", env.PUBLIC_ORIGIN).href}` : "");
 
+const links = (env: MailEnv, k?: string, own = true) => ({
+  talk: env.PUBLIC_ORIGIN ? new URL("/feedback?from=email", env.PUBLIC_ORIGIN).href : undefined,
+  ownDoor: own && env.PUBLIC_ORIGIN ? new URL(ownDoorPath("email", null, k), env.PUBLIC_ORIGIN).href : undefined,
+});
+
 // ponytail: Resend over plain fetch; swap this one function for another provider
 export const sendReceipt = async (env: MailEnv, r: Receipt, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
@@ -21,6 +31,7 @@ export const sendReceipt = async (env: MailEnv, r: Receipt, fetcher: typeof fetc
       from: env.EMAIL_FROM,
       to: r.to,
       subject: `Your knock reached ${r.who}`,
+      html: await render(<ReceiptEmail who={stripLinks(r.who)} days={r.days} link={r.link} {...links(env, r.k)} />),
       text: `Your knock was delivered to ${r.who}.\n\nThey have promised an answer within ${r.days} days. Follow it here:\n${r.link}\n\nKeep this link private. Anyone with it can see the status.${talk(env)}${ownDoor(env, r.k)}`,
     }),
   });
@@ -31,10 +42,13 @@ export const sendReceipt = async (env: MailEnv, r: Receipt, fetcher: typeof fetc
 export const sendClosure = async (env: MailEnv, r: Closure, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
   const who = stripLinks(r.who);
+  const message = stripLinks(r.message);
+  const again = r.later && r.again ? new Date(r.again).toISOString().slice(0, 10) : undefined;
+  const html = await render(<ClosureEmail who={who} message={message} later={r.later} expired={r.expired} again={again} {...links(env, r.k)} />);
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: (r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)`) + (r.later && r.again ? `\n\nYou can knock again from ${new Date(r.again).toISOString().slice(0, 10)}. We'll email you then.` : "") + talk(env) + ownDoor(env, r.k) }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, html, subject: r.expired ? `${who} didn't get to your knock` : r.later ? `${who} replied to your knock` : `${who} closed your knock`, text: (r.expired ? stripLinks(r.message) : `${stripLinks(r.message)}\n\n(${who} answered through Doorbell.)`) + (r.later && r.again ? `\n\nYou can knock again from ${new Date(r.again).toISOString().slice(0, 10)}. We'll email you then.` : "") + talk(env) + ownDoor(env, r.k) }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
@@ -53,10 +67,11 @@ export const sendYes = async (env: MailEnv, raw: Yes, fetcher: typeof fetch = fe
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
   const r = { ...raw, who: stripLinks(raw.who), note: raw.note && stripLinks(raw.note) };
   const parts = [`${r.who} said yes to your knock.`, r.note, r.code && `Your invite code: ${r.code}`, r.url && `Pick a time that works: ${r.url}`].filter(Boolean);
+  const html = await render(<YesEmail who={r.who} note={r.note} code={r.code} url={r.url} {...links(env, r.k)} />);
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, subject: `${r.who} said yes`, text: parts.join("\n\n") + talk(env) + ownDoor(env, r.k) }),
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: r.to, html, subject: `${r.who} said yes`, text: parts.join("\n\n") + talk(env) + ownDoor(env, r.k) }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);
   return "sent";
@@ -163,19 +178,22 @@ export type Digest = { to: string; fresh: number; open: number; top: { door: str
 export const sendDigest = async (env: MailEnv, r: Digest, fetcher: typeof fetch = fetch): Promise<"sent" | "unconfigured"> => {
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return "unconfigured";
   const n = (k: number, one: string) => `${k} ${k === 1 ? one : `${one}s`}`;
+  const summary = `${n(r.fresh, "new knock")} since your last digest. ${n(r.open, "knock")} waiting in total.`;
   const top = r.top.map((t) => `- ${t.door}, ${t.fit == null ? "not scored" : `fit ${t.fit}/5`}: ${stripLinks(t.excerpt)}`);
   const text = [
-    `${n(r.fresh, "new knock")} since your last digest. ${n(r.open, "knock")} waiting in total.`,
+    summary,
     top.length ? `Best fits:\n${top.join("\n")}` : null,
     `Answer them: ${r.inbox}`,
     `You get this at most once a day, only when there are new knocks.\nTurn it off: ${r.unsubscribe}`,
   ].filter(Boolean).join("\n\n") + talk(env);
+  const html = await render(<DigestEmail summary={summary} top={r.top.map((t) => ({ ...t, door: stripLinks(t.door), excerpt: stripLinks(t.excerpt) }))} inbox={r.inbox} unsubscribe={r.unsubscribe} talk={links(env).talk} />);
   const res = await fetcher("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({
       from: env.EMAIL_FROM,
       to: r.to,
+      html,
       subject: `${n(r.fresh, "new knock")} on your door`,
       text,
       headers: { "List-Unsubscribe": `<${r.unsubscribe}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
