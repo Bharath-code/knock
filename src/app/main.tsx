@@ -25,7 +25,7 @@ import { Textarea } from "./ui/textarea";
 import "../styles/theme.css";
 
 const api = hc<Api>("/api");
-const LABEL: Record<InboxAnswer, string> = { yes: "Yes", later: "Not now", no: "No" };
+const LABEL: Record<InboxAnswer | "pass", string> = { yes: "Yes", later: "Not now", no: "No", pass: "Pass" };
 const KEY: Record<InboxAnswer, string> = { yes: "Y", later: "L", no: "N" };
 const DOT: Record<InboxAnswer, string> = { yes: "bg-yes", later: "bg-later", no: "bg-destructive" };
 const DAY = 86_400_000;
@@ -103,8 +103,9 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
           <span className="truncate"><Marked text={proof.replace(/^https?:\/\//, "")} quote={quote?.replace(/^https?:\/\//, "") ?? null} /></span><ExternalLink className="size-3.5 shrink-0" aria-hidden />
         </a>
       )}
-      {(c.spam || c.rewrote) && (
+      {(c.spam || c.rewrote || c.passedBy) && (
         <div className="mt-4 flex flex-wrap gap-2">
+          {c.passedBy && <Badge variant="secondary">Passed by {c.passedBy}</Badge>}
           {c.spam && <Badge variant="destructive">Possible spam</Badge>}
           {c.rewrote && <Badge variant="secondary">Used AI rewrite</Badge>}
         </div>
@@ -144,7 +145,11 @@ const App = () => {
   const [codeText, setCodeText] = useState("");
   const streak = useRef({ n: 0, t0: 0 });
   const [moment, setMoment] = useState<{ n: number; m: number } | null>(null);
-  const undo = useRef<UndoEntry<{ card: InboxCard; index: number; a: InboxAnswer }>[]>([]);
+  const undo = useRef<UndoEntry<{ card: InboxCard; index: number; a: InboxAnswer | "pass" }>[]>([]);
+  const [passOpen, setPassOpen] = useState(false);
+  const [passDoor, setPassDoor] = useState("");
+  const [passLink, setPassLink] = useState("");
+  const [passNote, setPassNote] = useState("");
   const [ring, setRing] = useState(0);
   const [news, setNews] = useState(0);
   const settings = path.startsWith("/app/settings");
@@ -357,6 +362,29 @@ const App = () => {
     fail(r?.status === 409 ? "That knock was already answered." : "Couldn't save your answer. Try again.");
   }, [cards, i, reason, note, loadPools, undoLast, navigate]);
 
+  const passCard = useCallback(async () => {
+    const card = cards?.[i];
+    const to = (passDoor || passLink).trim();
+    if (!card || !to) return;
+    const text = passNote.trim();
+    setPassOpen(false);
+    setPassNote("");
+    setPassLink("");
+    answered.current.add(card.id);
+    setCards((cs) => cs!.filter((x) => x.id !== card.id));
+    setI((n) => Math.max(0, Math.min(n, (cards?.length ?? 1) - 2)));
+    const r = await api.inbox[":id"].pass.$post({ param: { id: card.id }, json: { to, note: text } }).catch(() => null);
+    if (r?.ok) {
+      undo.current = pushUndo(undo.current, { card, index: i, a: "pass" }, Date.now());
+      toast("Passed. The sender gets an email to confirm.", { id: "undo", duration: UNDO_MS, action: { label: "Undo", onClick: () => void undoLast() } });
+      return;
+    }
+    answered.current.delete(card.id);
+    setCards((cs) => [...cs!.slice(0, i), card, ...cs!.slice(i)]);
+    setPassNote(text);
+    fail(((await r?.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't pass this knock. Try again.");
+  }, [cards, i, passDoor, passLink, passNote, undoLast]);
+
   const closeRest = () => run("close", async () => {
     const r = await api.inbox["close-rest"].$post().catch(() => null);
     if (!r?.ok) return fail("Couldn't close your knocks. Nothing was changed.");
@@ -497,6 +525,45 @@ const App = () => {
             </Button>
           ))}
         </div>
+        <AlertDialog open={passOpen} onOpenChange={setPassOpen}>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" className="mt-3 w-full">Pass to a better door</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Pass to a better door</AlertDialogTitle>
+              <AlertDialogDescription>The sender gets an email and nothing is shared with the other door until they tap to confirm. You will not answer this knock again.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4">
+              {badges.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="pass-door">One of your doors</Label>
+                  <NativeSelect id="pass-door" className="w-full" value={passDoor} onChange={(e) => setPassDoor(e.target.value)}>
+                    <NativeSelectOption value="">Paste a link instead</NativeSelectOption>
+                    {badges.map((b) => <NativeSelectOption key={b.doorId} value={b.doorId}>{b.slug === "profile" ? "Your profile door" : b.slug}</NativeSelectOption>)}
+                  </NativeSelect>
+                </div>
+              )}
+              {!passDoor && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="pass-link">Door link</Label>
+                  <Input id="pass-link" value={passLink} placeholder="https://…/d/handle/slug" maxLength={300} onChange={(e) => setPassLink(e.target.value)} />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <Label htmlFor="pass-note">One-line note <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <span className="font-mono text-xs text-muted-foreground tabular">{passNote.length}/{NOTE_MAX}</span>
+                </div>
+                <Input id="pass-note" value={passNote} maxLength={NOTE_MAX} placeholder="Why that door fits better" onChange={(e) => setPassNote(e.target.value)} />
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction disabled={!(passDoor || passLink.trim())} onClick={() => void passCard()}>Pass it on</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <p className="mt-4 hidden items-center justify-center gap-1.5 text-xs text-muted-foreground lg:flex">
           <Kbd>J</Kbd><Kbd>K</Kbd> move · <Kbd>U</Kbd> undo · swipe on touch
         </p>

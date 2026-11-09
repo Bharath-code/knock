@@ -4,6 +4,15 @@ export type Release = { date: string; title: string; points: string[] };
 export const CHANGELOG: Release[] = [
   {
     date: "2026-11-09",
+    title: "Pass to a better door",
+    points: [
+      "Not the right door for a knock? Pass it to another of your doors or any door link, with a one-line note.",
+      "The sender gets an email saying who passed them and where. Nothing is shared with the new door until they tap to confirm.",
+      "The new receiver sees \"Passed by\" and the receiver's name on the card.",
+    ],
+  },
+  {
+    date: "2026-11-09",
     title: "Small delights",
     points: [
       "A bell rings, the tab title shows a count and the header says so when a new knock arrives in an open inbox.",

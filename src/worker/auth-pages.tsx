@@ -89,7 +89,43 @@ export const SeenOffPage = ({ token, valid, done }: { token: string; valid: bool
   </Shell>
 );
 
-export const OutcomePage = ({ token, view, done }: { token: string; view: { side: string; who: string; about: string } | null; done?: boolean }) => (
+const PASS_ERROR = {
+  invalid: "This link is not valid.",
+  expired: "This pass expired. Your knock stays where it is.",
+  closed: "That door is closed, so nothing was sent.",
+  knocked: "You already knocked on that door, so nothing was sent.",
+  limited: "Too many knocks from your network on that door. Try again in an hour.",
+} as const;
+
+export const PassConfirmPage = ({ token, view, done, error }: { token: string; view: { by: string; toName: string; door: string; note: string | null; status: string; expired: boolean; closed: boolean } | null; done?: boolean; error?: keyof typeof PASS_ERROR }) => (
+  <Shell title="Pass to a better door | Doorbell" description="Confirm before your knock is shared." head={<meta name="robots" content="noindex, nofollow" />}>
+    <h1 class="text-3xl">{done ? "Your knock was sent" : view ? `${view.by} passed you to ${view.toName}'s door` : "Pass to a better door"}</h1>
+    {!view || error === "invalid" ? (
+      <p role="alert" class={`mt-6 ${alert}`}>{PASS_ERROR.invalid}</p>
+    ) : done ? (
+      <p class="mt-3 text-lg text-muted-foreground">{view.toName} now has your knock. You will get an email with a link to follow it.</p>
+    ) : (
+      <>
+        {view.note && <p class="mt-3 text-lg">"{view.note}"</p>}
+        <p class="mt-3 text-lg text-muted-foreground">Door: {view.door}</p>
+        {error ? (
+          <p role="alert" class={`mt-6 ${alert}`}>{PASS_ERROR[error]}</p>
+        ) : view.expired || view.closed ? (
+          <p role="alert" class={`mt-6 ${alert}`}>{view.expired ? PASS_ERROR.expired : PASS_ERROR.closed}</p>
+        ) : (
+          <>
+            <p class="mt-3 text-muted-foreground">Nothing is shared until you tap. Sending gives {view.toName} the message and answers you wrote in your original knock.</p>
+            <form method="post" action={`/p/${token}`} class="mt-8">
+              <button class={button}>Send my knock to {view.toName}</button>
+            </form>
+          </>
+        )}
+      </>
+    )}
+  </Shell>
+);
+
+export const OutcomePage =({ token, view, done }: { token: string; view: { side: string; who: string; about: string } | null; done?: boolean }) => (
   <Shell title="Did it happen? | Doorbell" description="Tell us how it went." head={<meta name="robots" content="noindex, nofollow" />}>
     <h1 class="text-3xl">{done ? "Thanks, that helps" : "Did it happen?"}</h1>
     {!view ? (

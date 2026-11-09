@@ -19,14 +19,15 @@ export const ownerUser = async (db: D1Database, token: string | undefined, now =
 
 type Row = {
   id: string; slug: string; kind: string; template: string; answers_json: string; proof_url: string | null; fit: number | null;
-  spam: number; used_rewrite: number; created_at: number; expires_at: number; evidence_json: string | null;
+  spam: number; used_rewrite: number; created_at: number; expires_at: number; evidence_json: string | null; passed_by: string | null;
 };
 
 // Best fit first, unscored last, then oldest first because the oldest expire first.
 export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()): Promise<InboxCard[]> => {
   const { results } = await db
     .prepare(
-      `SELECT k.id, d.slug, d.kind, d.template, k.answers_json, k.proof_url, k.fit, k.spam, k.used_rewrite, k.created_at, k.expires_at, k.evidence_json
+      `SELECT k.id, d.slug, d.kind, d.template, k.answers_json, k.proof_url, k.fit, k.spam, k.used_rewrite, k.created_at, k.expires_at, k.evidence_json,
+              (SELECT COALESCE(NULLIF(pp.display_name, ''), '@' || pp.handle) FROM knocks pk JOIN doors pd ON pd.id = pk.door_id JOIN users pu ON pu.id = pd.owner_user_id JOIN people pp ON pp.id = pu.person_id WHERE pk.id = k.passed_from_knock_id) AS passed_by
        FROM knocks k JOIN doors d ON d.id = k.door_id
        WHERE d.owner_user_id = ?1 AND k.status IN ('new', 'seen') AND k.expires_at > ?2
        ORDER BY k.fit IS NULL, k.fit DESC, k.created_at ASC`,
@@ -40,7 +41,7 @@ export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()):
     const chips = groundChips(stored, [body.message ?? "", ...(body.answers ?? []).map((a) => a.a), r.proof_url ?? ""]);
     return {
       chips, id: r.id, door: r.kind === "profile" ? "Your door" : r.slug, template: r.template, message: body.message ?? "", answers: body.answers ?? [],
-      proof: r.proof_url, fit: r.fit, spam: r.spam === 1, rewrote: r.used_rewrite === 1, createdAt: r.created_at, expiresAt: r.expires_at,
+      proof: r.proof_url, fit: r.fit, spam: r.spam === 1, rewrote: r.used_rewrite === 1, createdAt: r.created_at, expiresAt: r.expires_at, ...(r.passed_by ? { passedBy: r.passed_by } : {}),
     };
   });
 };
@@ -101,7 +102,7 @@ const undoable = `d.knock_id = ?1 AND d.actor_user_id = ?3 AND d.reason_code IS 
 
 export const undoKnock = async (db: D1Database, o: OwnerUser, knockId: string, now = Date.now()) => {
   const since = now - UNDO_MS;
-  const dec = `SELECT d.id FROM decisions d WHERE ${undoable} AND d.answer IN ('yes','later','no')`;
+  const dec = `SELECT d.id FROM decisions d WHERE ${undoable} AND d.answer IN ('yes','later','no','pass')`;
   const done = await db.batch([
     db
       .prepare(`UPDATE door_stats SET answered_in_window = MAX(answered_in_window - 1, 0), updated_at = ?2 WHERE door_id IN (SELECT door_id FROM knocks WHERE id = ?1) AND EXISTS (${dec})`)
@@ -122,9 +123,13 @@ export const undoKnock = async (db: D1Database, o: OwnerUser, knockId: string, n
       .prepare(`INSERT INTO audit_log (id, org_id, actor, action, target, at) SELECT ?4, k.org_id, ?3, 'inbox.undo', k.id, ?5 FROM knocks k WHERE k.id = ?1 AND EXISTS (${dec})`)
       .bind(knockId, since, o.userId, crypto.randomUUID(), now),
     db.prepare(`DELETE FROM reminders WHERE knock_id = ?1 AND EXISTS (${dec} AND d.answer = 'later')`).bind(knockId, since, o.userId),
+    db
+      .prepare(`UPDATE door_stats SET passes_out = MAX(passes_out - 1, 0) WHERE door_id IN (SELECT door_id FROM knocks WHERE id = ?1) AND EXISTS (${dec} AND d.answer = 'pass')`)
+      .bind(knockId, since, o.userId),
+    db.prepare(`DELETE FROM passes WHERE from_knock_id = ?1 AND status = 'pending' AND EXISTS (${dec} AND d.answer = 'pass')`).bind(knockId, since, o.userId),
     db.prepare(`DELETE FROM decisions WHERE id IN (${dec})`).bind(knockId, since, o.userId),
   ]);
-  return (done[6]?.meta.changes ?? 0) === 1;
+  return (done[8]?.meta.changes ?? 0) === 1;
 };
 
 const open = `k.status IN ('new', 'seen') AND k.expires_at > ?1 AND k.door_id IN (SELECT id FROM doors WHERE owner_user_id = ?2)`;
