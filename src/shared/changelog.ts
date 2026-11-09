@@ -4,6 +4,14 @@ export type Release = { date: string; title: string; points: string[] };
 export const CHANGELOG: Release[] = [
   {
     date: "2026-11-09",
+    title: "Template gallery",
+    points: [
+      "Copy the setup of a public door that answers at least 80% of knocks: its questions and window, never its knocks.",
+      "Owners can list a door from Settings. Unlisting, or dropping under 80%, removes it.",
+    ],
+  },
+  {
+    date: "2026-11-09",
     title: "Referral post guides",
     points: ["Ten guides on how to answer a referral post on X, one per role, each with a sample DM and a link to the checker."],
   },

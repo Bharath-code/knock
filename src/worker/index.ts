@@ -10,11 +10,12 @@ import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { GuidePage, GuidesIndex } from "./seo-pages";
 import { guideBySlug, robotsTxt, sitemapXml } from "../shared/seo";
-import { ChangelogPage, DeletedPage, DoorPage, ExamplePage, FaqPage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
+import { ChangelogPage, DeletedPage, DoorPage, ExamplePage, FaqPage, GalleryPage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
 import { auditCsv, logAudit } from "./audit";
+import { galleryDoor, galleryRows, setListed } from "./gallery";
 import { badgeFor, badgeRows, badgeSvg, refreshDoorStats, setBadge } from "./stats";
-import { asKnockId, asRef, asTemplate } from "../shared/growth";
+import { asKnockId, asRef, asTemplate, STARTER } from "../shared/growth";
 import { sendClosure, sendDigest, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
 import { checkinView, dueCheckins, recordOutcome, type CheckinJob } from "./checkin";
@@ -238,6 +239,20 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
       return c.json({ ok: true });
     },
   )
+  .put(
+    "/listed/:doorId",
+    validator("json", (v, c) => {
+      const on = ((v ?? {}) as { on?: unknown }).on;
+      return typeof on === "boolean" ? { on } : c.json({ error: "Say whether the listing is on or off." }, 400);
+    }),
+    async (c) => {
+      if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
+      const { on } = c.req.valid("json");
+      if (!(await setListed(c.env.DB, c.get("owner"), c.req.param("doorId"), on))) return c.json({ error: "That door isn't yours." }, 404);
+      await logAudit(c.env.DB, c.get("owner"), "settings.listed", `${c.req.param("doorId")} ${on ? "on" : "off"}`);
+      return c.json({ ok: true });
+    },
+  )
   .post("/close-rest", async (c) => {
     const closed = await closeRest(c.env.DB, c.get("owner"));
     if (closed.length) track(c.env.FUNNEL, "answered", "close_rest", "", closed.length);
@@ -429,7 +444,10 @@ const app = new Hono<AppEnv>()
   .get("/new", async (c) => {
     // Starts the first-door timer; the POST reads it and clears it.
     if (!getCookie(c, "nt")) setCookie(c, "nt", String(Date.now()), { httpOnly: true, secure: new URL(c.req.url).protocol === "https:", sameSite: "Lax", path: "/new", maxAge: 3600 });
-    return c.html(NewDoorPage({ owner: await ownerFromToken(c.env.DB, getCookie(c, "ds")), siteKey: c.env.TURNSTILE_SITE_KEY, ref: asRef(c.req.query("ref")), k: asKnockId(c.req.query("k")), starter: asTemplate(c.req.query("t")) }));
+    const copy = await galleryDoor(c.env.DB, c.req.query("from"));
+    const owner = await ownerFromToken(c.env.DB, getCookie(c, "ds"));
+    if (copy) return c.html(NewDoorPage({ owner, siteKey: c.env.TURNSTILE_SITE_KEY, post: STARTER[copy.template], template: copy.template, fields: copy.fields, window: copy.window, copied: true }));
+    return c.html(NewDoorPage({ owner, siteKey: c.env.TURNSTILE_SITE_KEY, ref: asRef(c.req.query("ref")), k: asKnockId(c.req.query("k")), starter: asTemplate(c.req.query("t")) }));
   })
   .post("/new", async (c) => {
     const form = await c.req.parseBody({ all: true });
@@ -532,6 +550,7 @@ const app = new Hono<AppEnv>()
     return c.html(DeletedPage());
   })
   .get("/privacy", (c) => c.html(PrivacyPage()))
+  .get("/templates", async (c) => c.html(GalleryPage({ rows: await galleryRows(c.env.DB) })))
   .get("/guides", (c) => c.html(GuidesIndex({ origin: originOf(c) })))
   .get("/guides/:slug", (c) => {
     const guide = guideBySlug(c.req.param("slug"));

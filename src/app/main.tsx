@@ -139,7 +139,7 @@ const App = () => {
   const [account, setAccount] = useState<{ email: string | null; handle: string | null; digest: boolean } | null>(null);
   const [emailIn, setEmailIn] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
-  const [badges, setBadges] = useState<{ doorId: string; slug: string; handle: string | null; optin: boolean; pct: number | null; days: number; shown: boolean }[]>([]);
+  const [badges, setBadges] = useState<{ doorId: string; slug: string; handle: string | null; optin: boolean; listed: boolean; pct: number | null; days: number; shown: boolean }[]>([]);
   const [poolDoor, setPoolDoor] = useState("");
   const [codeText, setCodeText] = useState("");
   const streak = useRef({ n: 0, t0: 0 });
@@ -186,6 +186,13 @@ const App = () => {
     api.inbox.badges.$get().then(async (r) => r.ok && setBadges(await r.json())).catch(() => {});
   }, []);
 
+  const setListedOn = (doorId: string, on: boolean) => run(`listed-${doorId}`, async () => {
+    const r = await api.inbox.listed[":doorId"].$put({ param: { doorId }, json: { on } }).catch(() => null);
+    if (!r?.ok) return fail("Couldn't save the listing setting.");
+    const list = await api.inbox.badges.$get().then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (list) setBadges(list);
+    toast.success(on ? "Listed once you qualify." : "Unlisted.");
+  });
   const setBadgeOn = (doorId: string, on: boolean) => run(`badge-${doorId}`, async () => {
     const r = await api.inbox.badges[":doorId"].$put({ param: { doorId }, json: { on } }).catch(() => null);
     if (!r?.ok) return fail("Couldn't save the badge setting.");
@@ -579,6 +586,13 @@ const App = () => {
                             </p>
                           </div>
                           <Switch id={`badge-${b.doorId}`} className="mt-1" checked={b.optin} disabled={busy === `badge-${b.doorId}`} onCheckedChange={(v) => void setBadgeOn(b.doorId, v)} />
+                        </div>
+                        <div className="mt-3 flex items-start justify-between gap-4">
+                          <div>
+                            <Label htmlFor={`listed-${b.doorId}`}>List in template gallery</Label>
+                            <p className="mt-1 text-sm text-muted-foreground">Others can copy this door's questions and window, never its knocks. Needs 80% or more.</p>
+                          </div>
+                          <Switch id={`listed-${b.doorId}`} className="mt-1" checked={b.listed} disabled={busy === `listed-${b.doorId}`} onCheckedChange={(v) => void setListedOn(b.doorId, v)} />
                         </div>
                         {b.shown && (
                           <div className="mt-3 flex flex-col gap-3">
