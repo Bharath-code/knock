@@ -1,3 +1,4 @@
+import { groundChips } from "../shared/chips";
 import { CLOSE_MESSAGE, CLOSE_REASON, UNDO_MS, type InboxCard, type Reply } from "../shared/inbox";
 import { SESSION_SQL, sessionBinds, touchSession } from "./auth";
 import { sha256 } from "./doors";
@@ -18,14 +19,14 @@ export const ownerUser = async (db: D1Database, token: string | undefined, now =
 
 type Row = {
   id: string; slug: string; kind: string; template: string; answers_json: string; proof_url: string | null; fit: number | null;
-  spam: number; used_rewrite: number; created_at: number; expires_at: number;
+  spam: number; used_rewrite: number; created_at: number; expires_at: number; evidence_json: string | null;
 };
 
 // Best fit first, unscored last, then oldest first because the oldest expire first.
 export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()): Promise<InboxCard[]> => {
   const { results } = await db
     .prepare(
-      `SELECT k.id, d.slug, d.kind, d.template, k.answers_json, k.proof_url, k.fit, k.spam, k.used_rewrite, k.created_at, k.expires_at
+      `SELECT k.id, d.slug, d.kind, d.template, k.answers_json, k.proof_url, k.fit, k.spam, k.used_rewrite, k.created_at, k.expires_at, k.evidence_json
        FROM knocks k JOIN doors d ON d.id = k.door_id
        WHERE d.owner_user_id = ?1 AND k.status IN ('new', 'seen') AND k.expires_at > ?2
        ORDER BY k.fit IS NULL, k.fit DESC, k.created_at ASC`,
@@ -34,8 +35,11 @@ export const listInbox = async (db: D1Database, o: OwnerUser, now = Date.now()):
     .all<Row>();
   return results.map((r) => {
     const body = JSON.parse(r.answers_json) as { message?: string; answers?: { q: string; a: string }[] };
+    let stored: unknown = [];
+    try { stored = (JSON.parse(r.evidence_json ?? "{}") as { chips?: unknown }).chips; } catch { /* unreadable evidence: no chips */ }
+    const chips = groundChips(stored, [body.message ?? "", ...(body.answers ?? []).map((a) => a.a), r.proof_url ?? ""]);
     return {
-      id: r.id, door: r.kind === "profile" ? "Your door" : r.slug, template: r.template, message: body.message ?? "", answers: body.answers ?? [],
+      chips, id: r.id, door: r.kind === "profile" ? "Your door" : r.slug, template: r.template, message: body.message ?? "", answers: body.answers ?? [],
       proof: r.proof_url, fit: r.fit, spam: r.spam === 1, rewrote: r.used_rewrite === 1, createdAt: r.created_at, expiresAt: r.expires_at,
     };
   });
