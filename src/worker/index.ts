@@ -8,6 +8,8 @@ import { createDoorSchema, defaultFields, pickTemplate, PROFILE_SLUG, handleSche
 import { checkRequestSchema, tables, type Health } from "../shared/schema";
 import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
+import { GuidePage, GuidesIndex } from "./seo-pages";
+import { guideBySlug, robotsTxt, sitemapXml } from "../shared/seo";
 import { ChangelogPage, DeletedPage, DoorPage, ExamplePage, FaqPage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
 import { auditCsv, logAudit } from "./audit";
@@ -51,7 +53,9 @@ const validBody = validator("json", (value, c) => {
     : c.json({ error: "Send a post and a draft of up to 10,000 characters." }, 400);
 });
 
-type Secrets = Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string; RANKER?: string; ADMIN_EMAILS?: string; FUNNEL_DATASET?: string; ANALYTICS_SQL?: { query(q: { query: string }): Promise<{ data: Record<string, unknown>[] }> } };
+const originOf = (c: { env: { PUBLIC_ORIGIN?: string }; req: { url: string } }) => (c.env.PUBLIC_ORIGIN ?? new URL(c.req.url).origin).replace(/\/$/, "");
+
+type Secrets =Env & { ANTHROPIC_API_KEY?: string; TURNSTILE_SECRET?: string; TURNSTILE_SITE_KEY?: string; TURNSTILE_HOSTNAMES?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; CODES_KEY?: string; PUBLIC_ORIGIN?: string; RANKER?: string; ADMIN_EMAILS?: string; FUNNEL_DATASET?: string; ANALYTICS_SQL?: { query(q: { query: string }): Promise<{ data: Record<string, unknown>[] }> } };
 type AppEnv = { Bindings: Secrets };
 
 const sameOrigin = (req: Request) => req.headers.get("origin") === new URL(req.url).origin;
@@ -528,6 +532,13 @@ const app = new Hono<AppEnv>()
     return c.html(DeletedPage());
   })
   .get("/privacy", (c) => c.html(PrivacyPage()))
+  .get("/guides", (c) => c.html(GuidesIndex({ origin: originOf(c) })))
+  .get("/guides/:slug", (c) => {
+    const guide = guideBySlug(c.req.param("slug"));
+    return guide ? c.html(GuidePage({ guide, origin: originOf(c) })) : c.html(NotFoundDoor(), 404);
+  })
+  .get("/sitemap.xml", (c) => c.body(sitemapXml(originOf(c)), 200, { "content-type": "application/xml; charset=utf-8" }))
+  .get("/robots.txt", (c) => c.text(robotsTxt(originOf(c))))
   .get("/faq", (c) => c.html(FaqPage()))
   .get("/changelog", (c) => c.html(ChangelogPage()))
   .get("/example", (c) => c.html(ExamplePage()))

@@ -4,6 +4,11 @@ export type Release = { date: string; title: string; points: string[] };
 export const CHANGELOG: Release[] = [
   {
     date: "2026-11-09",
+    title: "Referral post guides",
+    points: ["Ten guides on how to answer a referral post on X, one per role, each with a sample DM and a link to the checker."],
+  },
+  {
+    date: "2026-11-09",
     title: "Closing the loop",
     points: [
       "You get an email when a receiver first opens your knock, with its own switch to turn it off.",
