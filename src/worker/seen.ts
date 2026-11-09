@@ -11,7 +11,7 @@ export const seenJobs = async (db: D1Database, ids: string[]): Promise<SeenJob[]
   const marks = ids.map(() => "?").join(",");
   const { results } = await db
     .prepare(
-      `SELECT k.id, k.person_id, s.email AS "to", COALESCE(r.display_name, '@' || r.handle) AS who
+      `SELECT k.id, k.person_id, s.email AS "to", COALESCE(NULLIF(r.display_name, ''), '@' || r.handle) AS who
        FROM knocks k JOIN people s ON s.id = k.person_id JOIN doors d ON d.id = k.door_id
        JOIN users u ON u.id = d.owner_user_id JOIN people r ON r.id = u.person_id
        LEFT JOIN notification_prefs np ON np.person_id = s.id
