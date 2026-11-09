@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { admit, initAdmit, type SqlLike } from "./admit";
+import { Database } from "bun:sqlite";
+import { release } from "./admit";
 import { sendClosure, sendReminder } from "./email";
 import { answerKnock, undoKnock } from "./inbox";
 import { dueReminders, REMIND_MS } from "./reminders";
@@ -72,4 +75,27 @@ test("emails: the Not now closure names the date; the reminder masks links", asy
   expect(sent[1]!.text).not.toContain("knock again from");
   await sendReminder(env, { to: "a@x.com", who: "Riya evil.co", link: "https://x.test/d/riya" }, f);
   expect(sent[2]!.subject).toBe("You can knock again on Riya [link removed]'s door");
+});
+
+test("after the purge the sender can knock the door again: the door forgets the key", async () => {
+  const { db, sqlite } = await setup();
+  const mem = new Database(":memory:");
+  const sql: SqlLike = { exec: (q, ...b) => { const rows = mem.query(q).all(...(b as never[])); return { toArray: () => rows }; } };
+  initAdmit(sql);
+  expect(admit(sql, "a@x.com", "1.1.1.1", NOW)).toBe("ok");
+  await answerKnock(db, O, "a", { answer: "later" }, NOW);
+  expect(admit(sql, "a@x.com", "1.1.1.1", NOW)).toBe("duplicate");
+  const freed = await purgeClosed(db, NOW + REMIND_MS + 1);
+  expect(freed).toEqual([{ doorId: "d", key: "a@x.com" }]);
+  for (const f of freed) release(sql, f.key);
+  expect(admit(sql, "a@x.com", "1.1.1.1", NOW + REMIND_MS)).toBe("ok");
+  expect(sqlite.query("SELECT COUNT(*) AS n FROM knocks WHERE id = 'a'").get()).toEqual({ n: 0 });
+});
+
+test("a key is kept while an alias of it still holds a live knock on the door", async () => {
+  const { db, sqlite } = await setup();
+  sqlite.run(`INSERT INTO people (id,email,email_hash,created_at) VALUES ('s1b','a+tag@x.com','h1b',1)`);
+  sqlite.run(`INSERT INTO knocks (id,org_id,door_id,person_id,answers_json,status,token_hash,consent_at,source,created_at,expires_at) VALUES ('ab','o','d','s1b','{}','new','tab',1,'bio',?,?)`, [NOW, NOW + 9e9]);
+  await answerKnock(db, O, "a", { answer: "later" }, NOW);
+  expect(await purgeClosed(db, NOW + REMIND_MS + 1)).toEqual([]);
 });

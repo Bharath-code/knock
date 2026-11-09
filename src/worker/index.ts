@@ -641,7 +641,7 @@ export default {
     await pruneLimits(env.DB);
     await pruneAuth(env.DB);
     await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
-    await purgeClosed(env.DB);
+    for (const f of await purgeClosed(env.DB)) await env.DOOR.getByName(f.doorId).forget(f.key).catch((e) => console.error("forget failed", e instanceof Error ? e.message : e));
     const reminders = await dueReminders(env.DB, Date.now());
     for (let i = 0; i < reminders.length; i += 100) await env.JOBS.sendBatch(reminders.slice(i, i + 100).map((body) => ({ body })));
     const digests = await digestJobs(env.DB);

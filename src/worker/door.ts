@@ -17,6 +17,10 @@ export class Door extends DurableObject<Env> {
 
   // Alarm = the earliest open knock's window end. Re-armed on every knock, every inbox connection
   // (which also heals knocks written before this existed), and after each run.
+  forget(key: string) {
+    release(this.ctx.storage.sql, key);
+  }
+
   async rearm() {
     const id = this.ctx.id.name;
     if (!id) return;
