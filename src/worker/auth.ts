@@ -1,5 +1,5 @@
-import { emailKey, normalizeEmail } from "../shared/knock";
-import { randomHex, sha256 } from "./doors";
+import { normalizeEmail } from "../shared/knock";
+import { idHash, randomHex, sha256 } from "./doors";
 
 export const LINK_MS = 15 * 60_000;
 export const SESSION_MS = 30 * 86_400_000;
@@ -32,7 +32,7 @@ export const requestLink = async (db: D1Database, email: string, personId: strin
   const e = normalizeEmail(email);
   await db
     .prepare("INSERT INTO magic_links (token_hash, email, email_hash, person_id, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-    .bind(await sha256(token), e, await sha256(emailKey(e)), personId, now + LINK_MS, now)
+    .bind(await sha256(token), e, await idHash(e), personId, now + LINK_MS, now)
     .run();
   return token;
 };
@@ -41,17 +41,15 @@ type Link = { email: string; email_hash: string; person_id: string | null };
 export type Confirmed = { ok: true; token: string; alert: string | null } | { ok: false; error: string };
 
 const attach = async (db: D1Database, link: Link & { person_id: string }): Promise<string | null> => {
-  const p = await db.prepare("SELECT email, email_hash FROM people WHERE id = ?1").bind(link.person_id).first<{ email: string; email_hash: string }>();
+  const p = await db.prepare("SELECT email FROM people WHERE id = ?1").bind(link.person_id).first<{ email: string }>();
   if (!p) return "That account no longer exists.";
-  if (!p.email.endsWith(PLACEHOLDER)) return p.email_hash === link.email_hash ? null : "This account already has an email.";
+  if (!p.email.endsWith(PLACEHOLDER)) return normalizeEmail(p.email) === link.email ? null : "This account already has an email.";
   const other = await db
-    .prepare("SELECT p.id, p.email, EXISTS (SELECT 1 FROM users u WHERE u.person_id = p.id) AS has_user FROM people p WHERE p.email_hash = ?1")
-    .bind(link.email_hash)
-    .first<{ id: string; email: string; has_user: number }>();
+    .prepare("SELECT p.id, EXISTS (SELECT 1 FROM users u WHERE u.person_id = p.id) AS has_user FROM people p WHERE p.email = ?1")
+    .bind(link.email)
+    .first<{ id: string; has_user: number }>();
   if (other && other.id !== link.person_id) {
     if (other.has_user) return "That email already has an account. Sign in with it instead.";
-    // Only the exact address merges: a and a+x share a hash but can be different mailboxes (see personFor).
-    if (normalizeEmail(other.email) !== link.email) return "That email has knocked on a door before and can't be attached yet. Use a different email.";
     try {
       await mergeSender(db, other.id, link.person_id, link.email, link.email_hash);
     } catch {
@@ -85,16 +83,15 @@ const mergeSender = async (db: D1Database, from: string, to: string, email: stri
   ]);
 };
 
-// People are matched on the exact address. emailKey (which drops "+tag") is for knock dedupe only: on a
-// provider where a and a+x are different mailboxes, treating them as one person would be a takeover.
-// An address in an existing alias group that is not that person's own address cannot sign in.
+// A person is the exact normalized address; the confirmed link proves its owner holds it. a and a+x are different
+// people, since on many providers they are different mailboxes. emailKey (which drops "+tag") is only for abuse limits.
 const personFor = async (db: D1Database, link: Link, now: number): Promise<string | null> => {
   await db
     .prepare("INSERT OR IGNORE INTO people (id, email, email_hash, created_at) VALUES (?1, ?2, ?3, ?4)")
     .bind(crypto.randomUUID(), link.email, link.email_hash, now)
     .run();
-  const p = await db.prepare("SELECT id, email FROM people WHERE email_hash = ?1").bind(link.email_hash).first<{ id: string; email: string }>();
-  return p && normalizeEmail(p.email) === link.email ? p.id : null;
+  const p = await db.prepare("SELECT id FROM people WHERE email = ?1").bind(link.email).first<{ id: string }>();
+  return p?.id ?? null;
 };
 
 // Every user gets an org on first sign-in. Senders already have a people row but no user yet.

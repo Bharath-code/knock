@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { emailKey } from "../shared/knock";
 import { admit, initAdmit, KNOCKS_PER_IP_HOUR, release, type SqlLike } from "./admit";
 
 const fresh = (): SqlLike => {
@@ -20,6 +21,14 @@ test("a second knock from the same email is a duplicate, even with a +tag or dif
   expect(admit(sql, "a@x.com", "1.1.1.1", T)).toBe("ok");
   expect(admit(sql, "a@x.com", "2.2.2.2", T)).toBe("duplicate");
   expect(admit(sql, "b@x.com", "3.3.3.3", T)).toBe("ok");
+});
+
+test("alias knocks on one door are still duplicates, now that people are matched on the exact address", () => {
+  const sql = fresh();
+  const keys = ["Riya@Gmail.com", "riya+1@gmail.com", " riya+2@gmail.com "].map(emailKey);
+  expect(admit(sql, keys[0]!, "1.1.1.1", T)).toBe("ok");
+  expect(admit(sql, keys[1]!, "2.2.2.2", T)).toBe("duplicate");
+  expect(admit(sql, keys[2]!, "3.3.3.3", T)).toBe("duplicate");
 });
 
 test("more than 5 attempts per IP per hour are blocked; other IPs and the next hour are fresh", () => {

@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { d1Metrics } from "./metrics";
 import { emailKey } from "../shared/knock";
 import { confirmLink, deviceLabel, IDLE_MS, LINK_MS, peekLink, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
-import { createDoor, ownerFromToken, sha256 } from "./doors";
+import { createDoor, idHash, ownerFromToken, sha256 } from "./doors";
+import { writeKnock } from "./knocks";
 import { ownerUser } from "./inbox";
 import { fakeDb } from "./testdb";
 import { deleteByToken } from "./retention";
@@ -56,7 +57,7 @@ test("signing in on a second device does not log out the first, and old cookies 
   expect(await ownerUser(db, "random", now)).toBeNull();
 });
 
-test("a sender who already knocked signs in as the same person with their own address, and no alias can take it over", async () => {
+test("a sender who already knocked signs in as the same person with their exact address; an alias is a different person", async () => {
   const { db, sqlite } = await fakeDb();
   sqlite.run(`INSERT INTO people (id, email, email_hash, created_at) VALUES ('s', 'a+knock@x.com', '${await sha256(emailKey("a@x.com"))}', 1)`);
   await signIn(db, "A+Knock@x.com");
@@ -64,11 +65,24 @@ test("a sender who already knocked signs in as the same person with their own ad
   expect(sqlite.query("SELECT person_id FROM users").get()).toEqual({ person_id: "s" });
   for (const alias of ["a@x.com", "a+other@x.com"]) {
     const r = await confirmLink(db, await requestLink(db, alias, null), Date.now());
-    expect(r.ok).toBe(false);
+    expect(r.ok).toBe(true);
   }
-  expect(sqlite.query("SELECT COUNT(*) n FROM people").get()).toEqual({ n: 1 });
-  expect(sqlite.query("SELECT COUNT(*) n FROM users").get()).toEqual({ n: 1 });
-  expect(sqlite.query("SELECT COUNT(*) n FROM sessions").get()).toEqual({ n: 1 });
+  expect(sqlite.query("SELECT COUNT(*) n FROM people").get()).toEqual({ n: 3 });
+  expect(sqlite.query("SELECT person_id FROM users WHERE person_id = 's'").get()).toEqual({ person_id: "s" });
+});
+
+test("knocking as one alias never blocks signing in as another, in both directions", async () => {
+  const { db, sqlite } = await fakeDb();
+  sqlite.run("INSERT INTO orgs VALUES ('o','o','free',1); INSERT INTO people (id,email,email_hash,handle,created_at) VALUES ('r','r@x.com','hr','rcv',1); INSERT INTO users VALUES ('ur','o','r','owner',1)");
+  sqlite.run("INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('d','o','ur','profile','profile','profile','[]',1)");
+  const knock = (email: string) => writeKnock(db, { orgId: "o", doorId: "d", windowDays: 7, email, key: emailKey(email), message: "hi", answers: [], proof: "", source: "bio" });
+
+  await knock("you+a@x.com");
+  expect((await confirmLink(db, await requestLink(db, "you@x.com", null), Date.now())).ok).toBe(true);
+  await knock("them@x.com");
+  expect((await confirmLink(db, await requestLink(db, "them+b@x.com", null), Date.now())).ok).toBe(true);
+  expect(sqlite.query("SELECT COUNT(*) n FROM knocks").get()).toEqual({ n: 2 });
+  expect(sqlite.query("SELECT email FROM people WHERE id IN (SELECT person_id FROM knocks) ORDER BY email").all()).toEqual([{ email: "them@x.com" }, { email: "you+a@x.com" }]);
 });
 
 test("peeking at a link says whose account it is without using it up", async () => {
@@ -96,7 +110,7 @@ test("attaching an email to an anonymous owner follows the person fixed at reque
 
   const ok = await claim("anon", "me@x.com");
   expect(ok.ok).toBe(true);
-  expect(sqlite.query("SELECT email, email_hash FROM people WHERE id = 'anon'").get()).toEqual({ email: "me@x.com", email_hash: await sha256(emailKey("me@x.com")) });
+  expect(sqlite.query("SELECT email, email_hash FROM people WHERE id = 'anon'").get()).toEqual({ email: "me@x.com", email_hash: await idHash("me@x.com") });
   const later = await signIn(db, "ME@x.com");
   expect((await ownerFromToken(db, later))?.handle).toBe("anon");
   expect(sqlite.query("SELECT COUNT(*) n FROM people").get()).toEqual({ n: 2 });
@@ -104,9 +118,10 @@ test("attaching an email to an anonymous owner follows the person fixed at reque
   expect(await claim("anon", "other@x.com")).toEqual({ ok: false, error: "This account already has an email." });
   expect(await claim("anon2", "me@x.com")).toEqual({ ok: false, error: "That email already has an account. Sign in with it instead." });
   sqlite.run(`INSERT INTO people (id, email, email_hash, created_at) VALUES ('snd', 'k+jobs@x.com', '${await sha256(emailKey("k@x.com"))}', 1)`);
-  const refused = await claim("anon2", "k@x.com");
-  expect(refused.ok).toBe(false);
-  expect(sqlite.query("SELECT email FROM people WHERE id = 'anon2'").get()).toEqual({ email: "anon2@anon.doorbell.invalid" });
+  const alias = await claim("anon2", "k@x.com");
+  expect(alias.ok).toBe(true);
+  expect(sqlite.query("SELECT email FROM people WHERE id = 'anon2'").get()).toEqual({ email: "k@x.com" });
+  expect(sqlite.query("SELECT email FROM people WHERE id = 'snd'").get()).toEqual({ email: "k+jobs@x.com" });
 });
 
 test("claiming the exact address a sender knocked from merges their knocks; an alias does not", async () => {

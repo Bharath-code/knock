@@ -3,6 +3,8 @@ import { SESSION_SQL, sessionBinds } from "./auth";
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 export const sha256 = async (s: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+// Identity key: the exact normalized address. The prefix keeps it clear of legacy hashes that were built from the +tag-stripped address.
+export const idHash = (email: string) => sha256(`id:${email}`);
 export const randomHex = (bytes: number) => hex(crypto.getRandomValues(new Uint8Array(bytes)).buffer as ArrayBuffer);
 const newToken = () => randomHex(24);
 
