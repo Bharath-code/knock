@@ -45,6 +45,14 @@ test("the reminder survives the purge of its knock and the sender, then goes out
   expect(await dueReminders(db, day + 2)).toEqual([]);
 });
 
+test("a reminder that can never go out stops holding the sender's email", async () => {
+  const { db, sqlite } = await setup();
+  await answerKnock(db, O, "a", { answer: "later" }, NOW);
+  await purgeClosed(db, NOW + REMIND_MS + 31 * 86_400_000);
+  expect(sqlite.query("SELECT COUNT(*) AS n FROM reminders").get()).toEqual({ n: 0 });
+  expect(sqlite.query("SELECT COUNT(*) AS n FROM people WHERE id = 's1'").get()).toEqual({ n: 0 });
+});
+
 test("a sender who deletes the knock cancels the reminder", async () => {
   const { db, sqlite } = await setup();
   sqlite.run("UPDATE knocks SET token_hash = ? WHERE id = 'a'", [await sha256("tok")]);

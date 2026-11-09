@@ -14,6 +14,8 @@ const ORPHANS = `DELETE FROM people WHERE id NOT IN (SELECT person_id FROM users
 export const purgeClosed = async (db: D1Database, now = Date.now()) => {
   await db.batch([
     db.prepare(`DELETE FROM knocks WHERE id IN (SELECT id FROM knocks WHERE ${closedBefore} LIMIT ${BATCH})`).bind(now - RETAIN_DAYS * DAY),
+    // A reminder that can no longer be sent (sent already, door closed, or a month overdue) must not keep a sender's email alive.
+    db.prepare("DELETE FROM reminders WHERE sent_at IS NOT NULL OR remind_at < ?1 OR door_id NOT IN (SELECT id FROM doors WHERE status = 'open')").bind(now - 30 * DAY),
     db.prepare(ORPHANS),
   ]);
 };
