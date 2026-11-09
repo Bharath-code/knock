@@ -24,6 +24,7 @@ Per task: build and test locally, then deploy to staging, run the staging smoke 
 - After changing the rank prompt, run `bun --env-file=.dev.vars scripts/check-rank.ts`. Every injected fixture must keep its band.
 - Live Turnstile widget lists the live hostname.
 - `PUBLIC_ORIGIN` in `wrangler.jsonc` is the live URL. The cron uses it to build the daily digest's inbox and unsubscribe links, because cron runs have no request URL. Update it if the live domain changes. Staging has no cron, so the digest only runs on live.
+- The changelog (`src/shared/changelog.ts`) is dated by merge, so before launch re-date the entries or fold them into one launch entry. Replace the first-draft FAQ (`src/shared/faq.ts`) with the questions in the feedback log.
 - `bun run deploy:live`, then smoke and Lighthouse against live.
 
 ## UI
