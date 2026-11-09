@@ -15,9 +15,9 @@ const ORPHANS = `DELETE FROM people WHERE id NOT IN (SELECT person_id FROM users
 export const purgeClosed = async (db: D1Database, now = Date.now()) => {
   const cutoff = now - RETAIN_DAYS * DAY;
   const { results: gone } = await db
-    .prepare(`SELECT k.door_id AS door, p.email FROM knocks k JOIN people p ON p.id = k.person_id WHERE k.id IN (SELECT id FROM knocks WHERE ${closedBefore} LIMIT ${BATCH})`)
+    .prepare(`SELECT k.door_id AS door, p.email, (SELECT answer FROM decisions WHERE knock_id = k.id ORDER BY at DESC LIMIT 1) AS answer FROM knocks k JOIN people p ON p.id = k.person_id WHERE k.id IN (SELECT id FROM knocks WHERE ${closedBefore} LIMIT ${BATCH})`)
     .bind(cutoff)
-    .all<{ door: string; email: string }>();
+    .all<{ door: string; email: string; answer: string | null }>();
   await db.batch([
     db.prepare(`DELETE FROM knocks WHERE id IN (SELECT id FROM knocks WHERE ${closedBefore} LIMIT ${BATCH})`).bind(cutoff),
     // A reminder that can no longer be sent (sent already, door closed, or a month overdue) must not keep a sender's email alive.
@@ -27,7 +27,8 @@ export const purgeClosed = async (db: D1Database, now = Date.now()) => {
   // The Door object remembers each sender's key so a second knock is refused. Hand back the keys that no live knock
   // still holds, so the caller can make the door forget them and a "knock again" promise is true.
   const freed: { doorId: string; key: string }[] = [];
-  for (const g of new Map(gone.map((r) => [`${r.door}\u0000${emailKey(r.email)}`, r])).values()) {
+  // Only a Not now or a window that ran out invites a second knock (their emails say so); a No or a Yes keeps the door closed to that sender.
+  for (const g of new Map(gone.filter((r) => r.answer === "later" || r.answer === "expired").map((r) => [`${r.door}\u0000${emailKey(r.email)}`, r])).values()) {
     const key = emailKey(g.email);
     const held = await db
       .prepare(`SELECT p.email FROM knocks k JOIN people p ON p.id = k.person_id WHERE k.door_id = ?1 AND p.email LIKE ?2`)

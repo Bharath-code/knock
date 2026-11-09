@@ -99,3 +99,9 @@ test("a key is kept while an alias of it still holds a live knock on the door", 
   await answerKnock(db, O, "a", { answer: "later" }, NOW);
   expect(await purgeClosed(db, NOW + REMIND_MS + 1)).toEqual([]);
 });
+
+test("a No keeps its key: only Not now and expired windows are freed at purge", async () => {
+  const { db } = await setup();
+  await answerKnock(db, O, "a", { answer: "no" }, NOW);
+  expect(await purgeClosed(db, NOW + REMIND_MS + 1)).toEqual([]);
+});

@@ -18,7 +18,7 @@ export const dueReminders = async (db: D1Database, now: number): Promise<Reminde
          AND door_id IN (SELECT id FROM doors WHERE status = 'open')
          AND person_id IN (SELECT id FROM people WHERE email NOT LIKE ?2)
        RETURNING (SELECT email FROM people WHERE id = person_id) AS "to",
-         (SELECT COALESCE(r.display_name, '@' || r.handle) FROM doors d JOIN users u ON u.id = d.owner_user_id JOIN people r ON r.id = u.person_id WHERE d.id = door_id) AS who,
+         (SELECT COALESCE(NULLIF(r.display_name, ''), '@' || r.handle) FROM doors d JOIN users u ON u.id = d.owner_user_id JOIN people r ON r.id = u.person_id WHERE d.id = door_id) AS who,
          (SELECT CASE WHEN d.slug = ?3 THEN '/d/' || r.handle ELSE '/d/' || r.handle || '/' || d.slug END FROM doors d JOIN users u ON u.id = d.owner_user_id JOIN people r ON r.id = u.person_id WHERE d.id = door_id) AS path`,
     )
     .bind(now, `%${PLACEHOLDER}`, PROFILE_SLUG)
