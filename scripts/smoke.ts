@@ -25,6 +25,10 @@ assert("unknown path is a 404", (await fetch(`${base}/no-such-page`)).status ===
 assert("metrics page is hidden without an admin session", (await fetch(`${base}/admin/metrics`)).status === 404);
 
 assert("feedback page", (await fetch(`${base}/feedback`)).ok);
+for (const page of ["faq", "changelog"]) {
+  const r = await fetch(`${base}/${page}`);
+  assert(`${page} page ships no JS`, r.ok && !(await r.text()).includes("<script"));
+}
 assert("feedback log is hidden without an admin session", (await fetch(`${base}/admin/feedback`)).status === 404);
 assert("home links to Talk to Bharath", homeHtml.includes('href="/feedback"'));
 
