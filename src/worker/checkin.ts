@@ -13,7 +13,7 @@ export type CheckinJob = { type: "checkin"; to: string; side: Side; who: string;
 
 // Tells two Yes answers apart: the door, and the start of what the sender wrote. Links are masked.
 const about = (kind: string, postText: string | null, answersJson: string) => {
-  const line = (postText ?? "").split("\n")[0]!.slice(0, 70);
+  const line = stripLinks((postText ?? "").split("\n")[0]!).slice(0, 70);
   const door = kind === "profile" ? "a profile door" : line ? `"${line}"` : "a door";
   let msg = "";
   try { msg = (JSON.parse(answersJson) as { message?: string }).message ?? ""; } catch { /* malformed row: door alone */ }

@@ -94,7 +94,7 @@ export const sendCheckin = async (env: MailEnv, raw: Checkin, fetcher: typeof fe
       from: env.EMAIL_FROM,
       to: raw.to,
       subject: sender ? `Did it happen with ${who}?` : "Did that Yes lead anywhere?",
-      text: `${sender ? `A week ago ${who} said yes to your knock` : "A week ago you said yes to a knock"}${raw.about ? ` on ${raw.about}` : ""}. Did it happen? It takes one tap:\n${raw.link}\n\nThis is the only check-in we'll send for this knock.${talk(env)}${sender ? ownDoor(env) : ""}`,
+      text: `${sender ? `A week ago ${who} said yes to your knock` : "A week ago you said yes to a knock"}${raw.about ? ` on ${stripLinks(raw.about)}` : ""}. Did it happen? It takes one tap:\n${raw.link}\n\nThis is the only check-in we'll send for this knock.${talk(env)}${sender ? ownDoor(env) : ""}`,
     }),
   });
   if (!res.ok) throw new Error(`email provider ${res.status}`);

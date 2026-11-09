@@ -33,10 +33,10 @@ test("a Yes gets one check-in per side after 7 days, never before, never twice, 
 test("each check-in says which Yes it is about, with links masked", async () => {
   const { db, sqlite } = await setup();
   sqlite.run(`UPDATE knocks SET answers_json = '{"message":"Hi, see https://evil.co/x for my work"}' WHERE id = 'a'`);
-  sqlite.run(`UPDATE doors SET kind = 'post', post_text = 'Referring one engineer\nmore text'`);
+  sqlite.run(`UPDATE doors SET kind = 'post', post_text = 'Referring one engineer, apply at evil.co/jobs\nmore text'`);
   const jobs = await dueCheckins(db, T0 + 7 * DAY);
   const mine = jobs.filter((j) => j.to === "a@x.com" || j.about.includes("evil") || j.about.includes("[link"));
-  expect(mine.map((j) => j.about)).toContain('"Referring one engineer": "Hi, see [link removed] for my work"');
+  expect(mine.map((j) => j.about)).toContain('"Referring one engineer, apply at [link removed]": "Hi, see [link removed] for my work"');
   const [first] = jobs;
   expect(await checkinView(db, first!.token)).toMatchObject({ about: first!.about });
 });
