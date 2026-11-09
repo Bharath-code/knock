@@ -596,6 +596,10 @@ const App = () => {
                 )}
               </Section>
 
+              <Section title="Audit log" desc="Every answer, bulk close and settings change, with who and when.">
+                <Button variant="outline" asChild><a href="/api/inbox/audit.csv" download>Download CSV</a></Button>
+              </Section>
+
               <Section title="Email and sign-in" desc="Use your email to sign in on other devices and get a daily digest.">
                 {account?.email ? (
                   <>

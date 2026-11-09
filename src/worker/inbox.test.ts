@@ -67,11 +67,11 @@ test("close the rest answers every open knock once, logs one audit row, and cann
   expect(closed.map((c) => c.to).sort()).toEqual(["a@x", "b@x"]);
   expect(await listInbox(db, owner, now)).toEqual([]);
   expect(sqlite.query("SELECT COUNT(*) n FROM decisions WHERE reason_code = 'bulk'").get()).toEqual({ n: 2 });
-  expect(sqlite.query("SELECT action, target FROM audit_log").all()).toEqual([{ action: "inbox.close_rest", target: "2 knocks" }]);
+  expect(sqlite.query("SELECT action, target FROM audit_log WHERE action LIKE 'inbox.close%'").all()).toEqual([{ action: "inbox.close_rest", target: "2 knocks" }]);
   expect(sqlite.query("SELECT answered_in_window n FROM door_stats").get()).toEqual({ n: 3 });
   expect(await undoKnock(db, owner, "low", now + 1_000)).toBe(false);
   expect(await closeRest(db, owner, now + 2_000)).toEqual([]);
-  expect(sqlite.query("SELECT COUNT(*) n FROM audit_log").get()).toEqual({ n: 1 });
+  expect(sqlite.query("SELECT COUNT(*) n FROM audit_log WHERE action LIKE 'inbox.close%'").get()).toEqual({ n: 1 });
 });
 
 test("client sort matches the server order", () => {
