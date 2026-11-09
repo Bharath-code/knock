@@ -8,7 +8,7 @@ import { closureMessage } from "../shared/closure";
 import { splitAround } from "../shared/chips";
 import { CLOSE_MESSAGE, keyAction, minutesTaken, MOMENT_MIN, NOTE_MAX, REASONS, POLL_MS, safeProof, popUndo, pushUndo, sortCards, swipeAnswer, UNDO_MS, type UndoEntry, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Pool } from "../shared/codes";
-import { card as cardBox } from "../shared/ui";
+import { dot, pill, raised, type Tone } from "../shared/ui";
 import type { Api } from "../worker";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
@@ -27,7 +27,7 @@ import "../styles/theme.css";
 const api = hc<Api>("/api");
 const LABEL: Record<InboxAnswer | "pass", string> = { yes: "Yes", later: "Not now", no: "No", pass: "Pass" };
 const KEY: Record<InboxAnswer, string> = { yes: "Y", later: "L", no: "N" };
-const DOT: Record<InboxAnswer, string> = { yes: "bg-yes", later: "bg-later", no: "bg-destructive" };
+const TONE: Record<InboxAnswer, Tone> = { yes: "yes", later: "later", no: "no" };
 const DAY = 86_400_000;
 const fail = (m: string) => toast.error(m);
 
@@ -36,12 +36,15 @@ const due = (at: number) => {
   return d <= 0 ? "Due today" : d === 1 ? "Due tomorrow" : `Due in ${d} days`;
 };
 
-const Fit = ({ fit }: { fit: number | null }) => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular">
-    <span aria-hidden className={cn("size-1.5 rounded-full", fit == null ? "bg-input" : fit >= 4 ? "bg-yes" : fit === 3 ? "bg-later" : "bg-destructive")} />
-    {fit == null ? "Not scored" : `Fit ${fit}/5`}
-  </span>
-);
+const Fit = ({ fit }: { fit: number | null }) => {
+  const t: Tone = fit == null ? "neutral" : fit >= 4 ? "yes" : fit === 3 ? "maybe" : "no";
+  return (
+    <span className={cn(pill(t), "tabular")}>
+      <span aria-hidden className={dot(t)} />
+      {fit == null ? "Not scored" : `Fit ${fit}/5`}
+    </span>
+  );
+};
 
 const Marked = ({ text, quote }: { text: string; quote: string | null }) => {
   const [a, b, z] = splitAround(text, quote);
@@ -63,7 +66,7 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
   const quote = pick === null ? null : (c.chips[pick]?.quote ?? null);
   return (
     <article
-      className={cn(cardBox, "animate-rise touch-pan-y p-5 shadow-e-2 select-none sm:p-6", !start.current && "transition-transform duration-(--d-base) ease-out")}
+      className={cn(raised, "animate-rise touch-pan-y p-5 select-none sm:p-6", !start.current && "transition-transform duration-(--d-base) ease-out")}
       style={{ transform: `translate(${drag[0]}px, ${Math.min(drag[1], 0)}px) rotate(${drag[0] / 24}deg)` }}
       onPointerDown={(e) => { if ((e.target as Element).closest("a, button")) return; start.current = [e.clientX, e.clientY]; e.currentTarget.setPointerCapture(e.pointerId); }}
       onPointerMove={(e) => start.current && setDrag([e.clientX - start.current[0], e.clientY - start.current[1]])}
@@ -71,7 +74,7 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
       onPointerCancel={() => { start.current = null; setDrag([0, 0]); }}
     >
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <p className="truncate font-mono text-xs text-muted-foreground">{c.door}</p>
+        <p className="inline-flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground"><DoorClosed className="size-3.5 shrink-0 text-primary" aria-hidden /><span className="truncate">{c.door}</span></p>
         <p className="flex items-center gap-3 text-xs text-muted-foreground"><Fit fit={c.fit} /><span className="tabular">{due(c.expiresAt)}</span></p>
       </header>
       {c.chips.length > 0 && (
@@ -82,7 +85,7 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
                 type="button"
                 aria-pressed={pick === n}
                 onClick={() => setPick(pick === n ? null : n)}
-                className="inline-flex min-h-11 items-center rounded-full border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-brass-soft aria-pressed:text-foreground sm:min-h-9"
+                className="inline-flex min-h-11 cursor-pointer items-center rounded-full border bg-card px-3 text-xs font-medium text-muted-foreground shadow-xs transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:border-primary/40 aria-pressed:bg-brass-soft aria-pressed:text-brass-ink sm:min-h-9"
               >
                 {x.label}
               </button>
@@ -90,11 +93,11 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
           ))}
         </ul>
       )}
-      <p className="mt-4 text-lg whitespace-pre-line"><Marked text={c.message} quote={quote} /></p>
+      <p className="mt-4 text-lg leading-relaxed whitespace-pre-line"><Marked text={c.message} quote={quote} /></p>
       {c.answers.length > 0 && (
-        <dl className="mt-5 space-y-3 border-t pt-4 text-sm">
+        <dl className="mt-5 grid gap-px overflow-hidden rounded-lg bg-border text-sm ring-1 ring-border">
           {c.answers.map((x) => (
-            <div key={x.q}><dt className="text-muted-foreground">{x.q}</dt><dd className="mt-0.5 break-words"><Marked text={x.a} quote={quote} /></dd></div>
+            <div key={x.q} className="bg-muted/50 px-4 py-3 dark:bg-muted/30"><dt className="text-xs font-medium text-muted-foreground">{x.q}</dt><dd className="mt-0.5 break-words font-medium"><Marked text={x.a} quote={quote} /></dd></div>
           ))}
         </dl>
       )}
@@ -115,12 +118,12 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
 };
 
 const Section = ({ title, desc, children }: { title: string; desc: string; children: ReactNode }) => (
-  <section className="grid gap-4 border-t py-8 sm:grid-cols-[minmax(0,13rem)_1fr] sm:gap-8">
-    <div>
+  <section className="grid gap-4 py-5 sm:grid-cols-[minmax(0,13rem)_1fr] sm:gap-8">
+    <div className="sm:pt-5">
       <h2 className="text-base font-semibold">{title}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{desc}</p>
     </div>
-    <div className="min-w-0 space-y-3">{children}</div>
+    <div className={cn(raised, "min-w-0 space-y-3 p-5")}>{children}</div>
   </section>
 );
 
@@ -423,11 +426,11 @@ const App = () => {
   useEffect(() => {
     if (card && moment) { setMoment(null); streak.current = { n: 0, t0: 0 }; }
   }, [card, moment]);
-  const tab = "inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground no-underline transition-colors duration-(--d-fast) hover:bg-accent hover:text-foreground aria-[current=page]:bg-accent aria-[current=page]:text-foreground sm:h-9";
+  const tab = "inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium text-muted-foreground no-underline transition-[background-color,box-shadow,color] duration-(--d-fast) hover:bg-card/70 hover:text-foreground aria-[current=page]:bg-card aria-[current=page]:text-foreground aria-[current=page]:shadow-e-2 sm:h-9";
 
   const inbox = gate ? (
     <div className="mx-auto max-w-md px-4 py-20 text-center">
-      <DoorClosed className="mx-auto size-8 text-muted-foreground" aria-hidden />
+      <span className="mx-auto grid size-12 place-content-center rounded-xl bg-button-primary"><DoorClosed className="size-6 text-primary-foreground" aria-hidden /></span>
       <h1 className="mt-4 text-2xl">No inbox on this device</h1>
       <p className="mt-2 text-muted-foreground">Make a door to start getting knocks, or sign in if you already have one.</p>
       <div className="mt-6 flex justify-center gap-3">
@@ -443,7 +446,7 @@ const App = () => {
     </div>
   ) : !card && moment ? (
     <div className="mx-auto max-w-md px-4 py-20 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95" role="status">
-      <CheckCheck className="mx-auto size-10 text-yes" aria-hidden />
+      <span className="mx-auto grid size-16 place-content-center rounded-xl bg-yes-soft ring-1 ring-inset ring-yes/25 shadow-[0_0_0_8px_color-mix(in_oklab,var(--yes)_8%,transparent)]"><CheckCheck className="size-8 text-yes" aria-hidden /></span>
       <h1 className="mt-4 text-3xl">All answered</h1>
       <p className="mt-3 text-xl font-semibold">You gave <span className="tabular">{moment.n}</span> people closure.</p>
       <p className="mt-1 text-muted-foreground">It took <span className="tabular">{moment.m}</span> {moment.m === 1 ? "minute" : "minutes"}.</p>
@@ -454,7 +457,7 @@ const App = () => {
     </div>
   ) : !card ? (
     <div className="mx-auto max-w-md px-4 py-20 text-center">
-      <InboxIcon className="mx-auto size-8 text-muted-foreground" aria-hidden />
+      <span className={cn(raised, "mx-auto grid size-12 place-content-center rounded-xl")}><InboxIcon className="size-6 text-primary" aria-hidden /></span>
       <h1 className="mt-4 text-2xl">{answered.current.size ? "All answered" : "No knocks yet"}</h1>
       <p className="mt-2 text-muted-foreground">Post your door link as the first reply under your post. New knocks show up here live.</p>
       <Button asChild variant="outline" className="mt-6"><a href="/example">See what a knock looks like</a></Button>
@@ -462,7 +465,7 @@ const App = () => {
   ) : (
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[20rem_minmax(0,1fr)] lg:py-10">
       <aside className="hidden lg:block" aria-label="Open knocks">
-        <p className="px-3 text-xs font-medium text-muted-foreground">Open <span className="tabular">{open}</span> · best fit first</p>
+        <p className="flex items-center gap-2 px-3 text-xs font-medium text-muted-foreground">Open <span className={cn(pill("brand"), "px-1.5 py-0 tabular")}>{open}</span> best fit first</p>
         <ul className="mt-2 space-y-0.5">
           {cards.map((c, n) => (
             <li key={c.id}>
@@ -470,7 +473,7 @@ const App = () => {
                 type="button"
                 onClick={() => setI(n)}
                 aria-current={n === i || undefined}
-                className="w-full cursor-pointer rounded-lg px-3 py-2.5 text-left transition-colors duration-(--d-fast) hover:bg-accent aria-[current=true]:bg-card aria-[current=true]:shadow-xs aria-[current=true]:ring-1 aria-[current=true]:ring-border"
+                className="w-full cursor-pointer rounded-lg px-3 py-2.5 text-left transition-[background-color,box-shadow] duration-(--d-fast) hover:bg-card/60 aria-[current=true]:bg-card aria-[current=true]:shadow-e-2"
               >
                 <span className="flex items-center justify-between gap-3">
                   <span className="truncate font-mono text-xs text-muted-foreground">{c.door}</span>
@@ -490,13 +493,13 @@ const App = () => {
         </div>
         <div className="mt-4"><Card key={card.id} c={card} onAnswer={answer} /></div>
 
-        <div className={cn(cardBox, "mt-4 space-y-5 p-5 sm:p-6")}>
+        <div className={cn(raised, "mt-4 space-y-5 p-5 sm:p-6")}>
           <fieldset>
             <legend className="text-sm font-medium">Reason <span className="font-normal text-muted-foreground">(optional)</span></legend>
             <div className="mt-2 flex flex-wrap gap-2">
               {(Object.keys(REASONS) as Reason[]).map((r) => (
                 <Button key={r} type="button" size="sm" variant="outline" aria-pressed={reason === r} onClick={() => setReason(reason === r ? undefined : r)}
-                  className="rounded-full text-muted-foreground aria-pressed:border-primary aria-pressed:bg-brass-soft aria-pressed:text-brass-ink">
+                  className="rounded-full text-muted-foreground aria-pressed:border-primary/40 aria-pressed:bg-brass-soft aria-pressed:text-brass-ink">
                   {REASONS[r]}
                 </Button>
               ))}
@@ -517,10 +520,10 @@ const App = () => {
             </details>
           </div>
         </div>
-        <div className="sticky bottom-3 z-10 mt-3 grid grid-cols-3 gap-2 rounded-xl border bg-card/90 p-2 shadow-e-2 backdrop-blur-md">
+        <div className="sticky bottom-3 z-10 mt-3 grid grid-cols-3 gap-1.5 rounded-xl bg-card/90 p-1.5 shadow-e-3 backdrop-blur-md">
           {(["no", "later", "yes"] as const).map((a) => (
-            <Button key={a} variant={a === "yes" ? "default" : "ghost"} className={a === "yes" ? "" : "text-foreground"} onClick={() => void answer(a)}>
-              {a !== "yes" && <span aria-hidden className={cn("size-2 rounded-full", DOT[a])} />}
+            <Button key={a} variant={a === "yes" ? "default" : "ghost"} className={cn("rounded-lg", a === "no" && "text-foreground hover:bg-no-soft hover:text-no-ink", a === "later" && "text-foreground hover:bg-later-soft hover:text-later-ink")} onClick={() => void answer(a)}>
+              {a !== "yes" && <span aria-hidden className={dot(TONE[a])} />}
               {LABEL[a]}
               <Kbd className={cn("max-sm:hidden", a === "yes" && "bg-primary-foreground/20 text-primary-foreground")} aria-hidden>{KEY[a]}</Kbd>
             </Button>

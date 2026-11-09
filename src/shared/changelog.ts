@@ -3,6 +3,15 @@ export type Release = { date: string; title: string; points: string[] };
 
 export const CHANGELOG: Release[] = [
   {
+    date: "2026-11-10",
+    title: "A warmer, clearer look",
+    points: [
+      "New type: an editorial serif for headings and a reading sans for everything else. No more code-style text for door names and dates.",
+      "Fit scores, answers and statuses now show as coloured pills, so you can scan the inbox at a glance.",
+      "Your knock's status page shows each step as done or waiting, and door pages show the owner's answer rate as a bar.",
+    ],
+  },
+  {
     date: "2026-11-09",
     title: "Pass to a better door",
     points: [

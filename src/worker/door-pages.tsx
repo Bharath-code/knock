@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import type { Child } from "hono/jsx";
 import css from "../styles/theme.css?url";
-import { alert, button as btn, card, hint, input, label, notice } from "../shared/ui";
+import { alert, button as btn, card, dot, hint, input, label, notice, pill } from "../shared/ui";
 import { RETAIN_DAYS } from "./retention";
 import { ownDoorPath, REF_LINE, STARTER, type Ref } from "../shared/growth";
 import { CHANGELOG } from "../shared/changelog";
@@ -15,8 +15,8 @@ import type { Status } from "./knocks";
 const copyScript = `document.querySelectorAll('[data-copy]').forEach(function(b){b.addEventListener('click',function(){var t=document.getElementById(b.dataset.copy);navigator.clipboard.writeText(t.value).then(function(){b.textContent='Copied'});t.select()})})`;
 
 // lucide door-closed, ISC
-const Mark = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-brass" aria-hidden="true">
+export const Mark = ({ class: cls = "text-brass" }: { class?: string }) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={cls} aria-hidden="true">
     <path d="M18 20V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14" /><path d="M2 20h20" /><path d="M14 12v.01" />
   </svg>
 );
@@ -32,8 +32,8 @@ export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, c
       <link rel="stylesheet" href={css} />
       {head}
     </head>
-    <body class="flex min-h-dvh flex-col bg-paper text-ink">
-      <header class="border-b border-line">
+    <body class="flex min-h-dvh flex-col overflow-x-clip bg-paper text-ink">
+      <header class="sticky top-0 z-30 border-b border-line bg-background/80 backdrop-blur-md">
         <div class="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4 sm:px-6">
           <a href="/" class="mr-auto inline-flex items-center gap-2 font-display text-lg font-semibold tracking-tight text-ink no-underline hover:text-ink">
             <Mark />Doorbell
@@ -43,7 +43,7 @@ export const Shell = ({ title, description, head, wide, copy, swap, poweredBy, c
           <a href="/app" class={btn({ variant: "outline" })}>Inbox</a>
         </div>
       </header>
-      <main class={`mx-auto w-full px-4 py-10 sm:px-6 sm:py-14 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
+      <main class={`relative isolate mx-auto w-full px-4 py-10 sm:px-6 sm:py-14 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
       {poweredBy && (
         <aside class="mt-auto border-t bg-muted/50">
           <div class="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-6 sm:px-6">
@@ -101,7 +101,18 @@ export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", temp
       description="Paste your post. Get a door link that guarantees every sender an answer."
       head={siteKey && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />}
     >
-      <p class="text-sm text-muted-foreground tabular">Step {step2 ? 2 : 1} of 2</p>
+      <p class="sr-only">Step {step2 ? 2 : 1} of 2</p>
+      <ol aria-hidden="true" class="grid max-w-xs grid-cols-2 gap-2 text-xs font-medium">
+        {["Your post", "Questions"].map((t, n) => {
+          const on = n === 0 || step2;
+          return (
+            <li>
+              <span class={`block h-1.5 rounded-full ${on ? "bg-button-primary" : "bg-muted"}`} />
+              <span class={`mt-1.5 block ${on ? "text-brass-ink" : "text-muted-foreground"}`}>{n + 1} · {t}</span>
+            </li>
+          );
+        })}
+      </ol>
       <h1 class="mt-2 text-3xl">{step2 ? "Check your door" : "Make a door"}</h1>
       <p class="mt-3 text-lg text-muted-foreground">
         {step2 ? "Edit what senders are asked, then create it." : "Paste the post you are about to share. Free, no sign-up."}
@@ -195,9 +206,15 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
       }
     >
       {made && (
-        <section class="mb-10 rounded-lg border border-brass/30 bg-brass-soft p-5 sm:p-6" aria-labelledby="live">
-          <h2 id="live" class="text-xl">Your door is live</h2>
-          <label for="reply" class={`mt-3 ${label}`}>Paste this in your post or bio</label>
+        <section class={`relative isolate mb-10 overflow-hidden p-5 sm:p-6 ${card}`} aria-labelledby="live">
+          <div aria-hidden="true" class="absolute inset-0 -z-10 bg-[radial-gradient(80%_120%_at_100%_0%,color-mix(in_oklab,var(--primary)_14%,transparent),transparent_70%)]" />
+          <div class="flex items-center gap-3">
+            <span aria-hidden="true" class="grid size-10 shrink-0 place-content-center rounded-xl bg-yes-soft text-yes ring-1 ring-inset ring-yes/25">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+            </span>
+            <h2 id="live" class="text-xl">Your door is live</h2>
+          </div>
+          <label for="reply" class={`mt-4 ${label}`}>Paste this in your post or bio</label>
           <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
             <input id="reply" readonly value={door.kind === "profile" ? `${url}?s=bio` : replyLine(`${url}?s=reply`)} class={`${input} font-mono text-sm`} />
             <button type="button" data-copy="reply" class={btn({ variant: "default" })}>Copy</button>
@@ -205,29 +222,39 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
         </section>
       )}
       <div class="flex items-center gap-3">
-        <span aria-hidden="true" class="grid size-11 shrink-0 place-content-center rounded-full bg-brass-soft font-display text-lg font-semibold text-brass-ink">
+        <span aria-hidden="true" class="grid size-12 shrink-0 place-content-center rounded-full bg-button-primary font-display text-lg font-semibold text-primary-foreground ring-4 ring-brass-soft">
           {(door.name || door.handle)[0]!.toUpperCase()}
         </span>
-        <p class="leading-tight">
-          <span class="block font-medium">{who}</span>
+        <p class="min-w-0 leading-tight">
+          <span class="block truncate font-medium">{who}</span>
           <span class="text-sm text-muted-foreground">@{door.handle}</span>
         </p>
+        {door.status === "open" && <span class={`ml-auto max-sm:hidden ${pill("yes")}`}><span class={dot("yes")} />Answers in {door.windowDays} days</span>}
       </div>
       <h1 class="mt-6 text-3xl">{door.kind === "profile" ? "Ask me anything. You will get an answer." : "What I am looking for"}</h1>
       {door.kind !== "profile" && <p class="mt-4 text-lg whitespace-pre-line">{door.post}</p>}
       {door.status !== "open" ? (
         <p class={`mt-8 ${alert}`}>This door is closed.</p>
       ) : (
-        <div class="mt-8 flex items-start gap-3 rounded-lg border border-yes/30 bg-yes-soft px-5 py-4">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0 text-yes" aria-hidden="true">
+        <div class={`mt-8 flex items-start gap-4 p-5 ${card}`}>
+          <span aria-hidden="true" class="grid size-10 shrink-0 place-content-center rounded-lg bg-yes-soft text-yes ring-1 ring-inset ring-yes/25">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
             <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" />
           </svg>
-          <p>
-            <span class="block font-medium">Every knock is answered within {door.windowDays} days.</span>
-            <span class="mt-0.5 block text-sm text-muted-foreground">
-              {rate !== null ? <span class="tabular">{rate}% answered in time across {door.knocks} knocks.</span> : "Yes, not now, or no. Never silence."}
-            </span>
-          </p>
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="font-medium">Every knock is answered within {door.windowDays} days.</p>
+            {rate !== null ? (
+              <>
+                <div class="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${rate}% answered in time`}>
+                  <div class="h-full rounded-full bg-yes" style={`width:${rate}%`} />
+                </div>
+                <p class="mt-2 text-sm text-muted-foreground tabular">{rate}% answered in time across {door.knocks} knocks.</p>
+              </>
+            ) : (
+              <p class="mt-0.5 text-sm text-muted-foreground">Yes, not now, or no. Never silence.</p>
+            )}
+          </div>
         </div>
       )}
       {door.status === "open" && <KnockFormView door={door} siteKey={siteKey} source={source} form={form} />}
@@ -235,25 +262,36 @@ export const DoorPage = ({ door, url, made, siteKey, source = "bio", form }: { d
   );
 };
 
-const SAMPLE_REPLIES = ["Yes", "Not now", "No"] as const;
+const SAMPLE_REPLIES = ["No", "Not now", "Yes"] as const;
 
 export const ExamplePage = () => (
   <Shell title="Sample door and knock | Doorbell" description="See what a door and a knock look like before you make your own.">
     <p class="text-sm font-medium text-brass-ink">Sample, not a real person</p>
     <h1 class="mt-2 text-3xl">What a door looks like</h1>
     <section class={`mt-6 p-5 sm:p-6 ${card}`} aria-labelledby="sample-door">
-      <p class="leading-tight"><span class="block font-medium">Maya Rao</span><span class="text-sm text-muted-foreground">@maya</span></p>
-      <h2 id="sample-door" class="mt-4 text-xl">What I am looking for</h2>
+      <div class="flex items-center gap-3">
+        <span aria-hidden="true" class="grid size-10 shrink-0 place-content-center rounded-full bg-button-primary font-display font-semibold text-primary-foreground ring-4 ring-brass-soft">M</span>
+        <p class="min-w-0 leading-tight"><span class="block font-medium">Maya Rao</span><span class="text-sm text-muted-foreground">@maya</span></p>
+        <span class={`ml-auto max-sm:hidden ${pill("yes")}`}><span class={dot("yes")} />Answers in 7 days</span>
+      </div>
+      <h2 id="sample-door" class="mt-5 text-xl">What I am looking for</h2>
       <p class="mt-2 whitespace-pre-line">I'm hiring a backend engineer in Hyderabad. Knock with your work and why you're a fit, and I'll answer every request.</p>
-      <p class="mt-4 rounded-lg border border-yes/30 bg-yes-soft px-4 py-3 text-sm font-medium">Every knock is answered within 7 days.</p>
+      <div class="mt-5 flex items-center gap-3 rounded-lg bg-yes-soft px-4 py-3 ring-1 ring-inset ring-yes/25">
+        <span class={dot("yes")} aria-hidden="true" />
+        <p class="text-sm font-medium">Every knock is answered within 7 days.</p>
+      </div>
     </section>
     <h2 class="mt-10 text-xl">What a knock looks like in your inbox</h2>
     <p class="mt-1 text-sm text-muted-foreground">Best fits come first. You answer with one tap.</p>
     <section class={`mt-4 p-5 sm:p-6 ${card}`} aria-label="Sample knock">
-      <p class="flex items-center justify-between gap-3 text-xs text-muted-foreground"><span class="font-mono">maya</span><span class="font-medium text-foreground">Fit 4 of 5</span></p>
-      <p class="mt-3">Hi Maya, 4 years shipping Go services at a fintech. Built git-scope (1k stars): github.com/example/git-scope. Open to a 15-minute call?</p>
-      <div class="mt-5 flex flex-wrap gap-2" aria-hidden="true">
-        {SAMPLE_REPLIES.map((r) => <span class={`${btn({ variant: r === "Yes" ? "default" : "outline" })} pointer-events-none`}>{r}</span>)}
+      <p class="flex items-center justify-between gap-3 text-xs text-muted-foreground"><span class="font-mono">hiring-backend-hyderabad</span><span class={pill("yes")}><span class={dot("yes")} />Fit 4 of 5</span></p>
+      <div class="mt-4 flex flex-wrap gap-2"><span class={pill("brand")}>Go · 4 yrs</span><span class={pill("neutral")}>Open source</span></div>
+      <p class="mt-3 text-lg leading-relaxed">Hi Maya, 4 years shipping Go services at a fintech. Built git-scope (1k stars): github.com/example/git-scope. Open to a 15-minute call?</p>
+      <div class="mt-5 grid grid-cols-3 gap-1.5 rounded-xl bg-muted/60 p-1.5 dark:bg-muted/40" aria-hidden="true">
+        {SAMPLE_REPLIES.map((r) =>
+          r === "Yes" ? <span class={`${btn({ variant: "default" })} pointer-events-none rounded-lg`}>{r}</span>
+            : <span class="inline-flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-medium sm:h-9"><span class={dot(r === "No" ? "no" : "later")} />{r}</span>,
+        )}
       </div>
     </section>
     <a href="/new" class={`mt-10 ${button}`}>Make your own door</a>
@@ -341,14 +379,17 @@ export const FaqPage = () => (
   <Shell title="FAQ | Doorbell" description="Answers to the questions people ask most about Doorbell.">
     <h1 class="text-3xl">FAQ</h1>
     <p class="mt-3 text-lg text-muted-foreground">Short answers. If yours is not here, <a href="/feedback">Talk to Bharath</a>.</p>
-    <dl class="mt-10 space-y-8">
-      {FAQ.map((f) => (
-        <div>
-          <dt class="text-xl font-semibold">{f.q}</dt>
-          <dd class="mt-2 text-muted-foreground">{f.a}</dd>
-        </div>
+    <div class={`mt-10 divide-y ${card}`}>
+      {FAQ.map((f, i) => (
+        <details class="group" open={i === 0}>
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-medium transition-colors hover:text-brass-ink [&::-webkit-details-marker]:hidden">
+            {f.q}
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-muted-foreground transition-transform duration-(--d-base) group-open:rotate-45" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </summary>
+          <p class="px-5 pb-5 text-muted-foreground">{f.a}</p>
+        </details>
       ))}
-    </dl>
+    </div>
   </Shell>
 );
 
@@ -357,7 +398,12 @@ export const GalleryPage = ({ rows }: { rows: GalleryRow[] }) => (
     <h1 class="text-3xl">Template gallery</h1>
     <p class="mt-3 text-lg text-muted-foreground">Setups from public doors that answer at least 80% of knocks. You copy the questions and the window, never the knocks.</p>
     {rows.length === 0 ? (
-      <p class={`mt-10 ${notice}`}>No doors are listed yet. <a href="/new">Make a door</a> and list it from Settings once it qualifies.</p>
+      <div class={`mt-10 px-6 py-12 text-center ${card}`}>
+        <span class="mx-auto grid size-12 place-content-center rounded-xl bg-brass-soft"><Mark class="text-brass-ink" /></span>
+        <p class="mt-4 font-medium">No doors are listed yet</p>
+        <p class="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">Make a door and list it from Settings once it answers 80% of knocks.</p>
+        <a href="/new" class={`mt-6 ${btn({ variant: "default" })}`}>Make a door</a>
+      </div>
     ) : (
       <ul class="mt-10 grid gap-4 sm:grid-cols-2">
         {rows.map((r) => (
@@ -379,15 +425,19 @@ export const ChangelogPage = () => (
   <Shell title="Changelog | Doorbell" description="Everything that has shipped, newest first.">
     <h1 class="text-3xl">Changelog</h1>
     <p class="mt-3 text-lg text-muted-foreground">What shipped, newest first.</p>
-    <div class="mt-10 space-y-10">
-      {CHANGELOG.map((r) => (
-        <section>
-          <h2 class="text-xl"><time datetime={r.date} class="mr-2 font-mono text-sm text-muted-foreground">{r.date}</time>{r.title}</h2>
-          <ul class="mt-3 list-disc space-y-2 pl-5 text-muted-foreground">
-            {r.points.map((p) => <li>{p}</li>)}
-          </ul>
-        </section>
+    <ol class="mt-10">
+      {CHANGELOG.map((r, i) => (
+        <li class="relative pb-10 pl-8 last:pb-0 before:absolute before:top-3 before:bottom-0 before:left-[5px] before:w-px before:bg-border last:before:hidden">
+          <span aria-hidden="true" class={`absolute top-1.5 left-0 size-3 rounded-full ring-4 ${i === 0 ? "bg-primary ring-brass-soft" : "bg-input ring-background"}`} />
+          <time datetime={r.date} class={pill(i === 0 ? "brand" : "neutral")}>{r.date}</time>
+          <section class={`mt-3 p-5 ${card}`}>
+            <h2 class="text-xl">{r.title}</h2>
+            <ul class="mt-3 space-y-2 text-muted-foreground">
+              {r.points.map((p) => <li class="flex gap-3"><span aria-hidden="true" class="mt-2.5 size-1.5 shrink-0 rounded-full bg-primary/60" />{p}</li>)}
+            </ul>
+          </section>
+        </li>
       ))}
-    </div>
+    </ol>
   </Shell>
 );

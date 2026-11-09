@@ -1,20 +1,20 @@
 import { Body, Button, Container, Head, Hr, Html, Link, Preview, Section, Text } from "@react-email/components";
 import type { ReactNode } from "react";
 
-export const c = { brass: "#8f6416", bg: "#f6f4f0", card: "#ffffff", ink: "#24211c", muted: "#6b655b", line: "#e4e0d8" };
+export const c = { brass: "#ba4e00", bg: "#f6f4f0", card: "#ffffff", ink: "#24211c", muted: "#6b655b", line: "#e4e0d8" };
 
 const dark = `
 :root{color-scheme:light dark;supported-color-schemes:light dark}
 @media (prefers-color-scheme:dark){
-.bg{background-color:#171614!important}
+.bg,.bg>table>tbody>tr>td{background-color:#171614!important}
 .card{background-color:#222120!important;border-color:#37342f!important}
 .ink{color:#f1eee8!important}
 .muted{color:#b5afa4!important}
 .line{border-color:#37342f!important}
-.hd{background-color:#e0b04a!important}
-.hdt{color:#241c0a!important}
-.btn{background-color:#e0b04a!important;color:#241c0a!important}
-.lnk{color:#e0b04a!important}
+.hd{background-color:#f5a33a!important}
+.hdt{color:#25170d!important}
+.btn{background-color:#f5a33a!important;color:#25170d!important}
+.lnk{color:#f5a33a!important}
 }`;
 
 export const H = ({ children }: { children: ReactNode }) => (

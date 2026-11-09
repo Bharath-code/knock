@@ -33,7 +33,7 @@ Per task: build and test locally, then deploy to staging, run the staging smoke 
 - shadcn is set up (`components.json`, `@/` → `src/`). Add components with `bunx shadcn@latest add <name>`. They land in `src/app/ui/` and import `cn` from shadcn's `cn` package. Use them in `/app` only.
 - `src/shared/ui.ts` holds the shared recipes: `buttonVariants` (shadcn variant names, plus `destructive-outline`), `input`, `label`, `card`, `alert`, `notice`. shadcn's `Button` imports from it, and hono pages call `button({ variant, size })`. Never hand-copy button or input classes.
 - Colours are shadcn tokens in `src/styles/theme.css`, in oklch: warm neutral greys with brass as `primary`, and no blue. Light and dark come from `prefers-color-scheme` or `data-theme`; the `dark:` variant follows both. Old names (`paper`, `ink`, `brass`, `line`, `sunk`, `no`) are aliases. For grey text use `text-muted-foreground`, because `muted` is a background.
-- Type scale is `text-xs`…`text-3xl` only, with no pixel sizes. Headings are display font at weight 600. Buttons are 44px tall on touch screens (`h-11 sm:h-9`).
+- Type scale is `text-xs`…`text-3xl` only, with no pixel sizes. Headings are the display serif (Newsreader) at weight 500; body and UI are Schibsted Grotesk. No monospace face: `font-mono` maps to the sans with tabular digits. Buttons are 44px tall on touch screens (`h-11 sm:h-9`).
 - Every control needs hover, focus-visible, disabled and loading states. Keyboard shortcuts in `/app` must ignore inputs and `[role=dialog], [role=alertdialog]`.
 - After UI edits, run `~/.claude/skills/impeccable/scripts/impeccable detect --json <files>`. Check light and dark at 375px and 1280px, with no horizontal scroll.
 

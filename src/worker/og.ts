@@ -1,6 +1,6 @@
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import wasm from "@resvg/resvg-wasm/index_bg.wasm";
-import bold from "@fontsource/figtree/files/figtree-latin-800-normal.woff?inline";
+import bold from "@fontsource/schibsted-grotesk/files/schibsted-grotesk-latin-800-normal.woff?inline";
 import type { DoorView } from "./doors";
 
 // resvg reads TTF/OTF only and fontsource ships WOFF, so unwrap it: rebuild the sfnt from the zlib-compressed tables.
@@ -64,16 +64,16 @@ const wrap = (text: string, width: number, maxLines: number) => {
 };
 
 const text = (x: number, y: number, size: number, fill: string, s: string, extra = "") =>
-  `<text x="${x}" y="${y}" font-family="Figtree" font-weight="800" font-size="${size}" fill="${fill}" ${extra}>${esc(s)}</text>`;
+  `<text x="${x}" y="${y}" font-family="Schibsted Grotesk" font-weight="800" font-size="${size}" fill="${fill}" ${extra}>${esc(s)}</text>`;
 
 const frame = (inner: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#f5f6f9"/><rect x="60" y="60" width="1080" height="510" rx="24" fill="#fff" stroke="#e1e4ee" stroke-width="2"/>${text(110, 140, 26, "#946000", "DOORBELL", 'letter-spacing="4"')}${inner}</svg>`;
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#f6f4f0"/><rect x="60" y="60" width="1080" height="510" rx="24" fill="#fff" stroke="#e4e0d8" stroke-width="2"/>${text(110, 140, 26, "#ba4e00", "DOORBELL", 'letter-spacing="4"')}${inner}</svg>`;
 
 export const ogSvg = (d: DoorView) => {
   const who = d.name || `@${d.handle}`;
   const body = wrap(d.kind === "profile" ? "Every knock gets an answer." : d.post, 32, 4);
   return frame(
-    `${text(110, 215, 34, "#5d6480", `${who} is asking`)}${body.map((l, i) => text(110, 300 + i * 62, 52, "#141829", l)).join("")}${text(110, 530, 30, "#0b7a57", `Answered within ${d.windowDays} days, guaranteed`)}`,
+    `${text(110, 215, 34, "#6b655b", `${who} is asking`)}${body.map((l, i) => text(110, 300 + i * 62, 52, "#24211c", l)).join("")}${text(110, 530, 30, "#108846", `Answered within ${d.windowDays} days, guaranteed`)}`,
   );
 };
 
@@ -84,9 +84,9 @@ const int = (v: string | undefined, min: number, max: number) => {
 
 export const scoreSvg = (fit?: string) => {
   const n = int(fit, 1, 5);
-  const ring = (i: number) => `<circle cx="${620 + i * 90}" cy="340" r="32" fill="${i < n ? "#946000" : "#e1e4ee"}"/>`;
+  const ring = (i: number) => `<circle cx="${620 + i * 90}" cy="340" r="32" fill="${i < n ? "#ba4e00" : "#e4e0d8"}"/>`;
   return frame(
-    `${text(110, 230, 34, "#5d6480", "My ask scored")}${text(110, 420, 160, "#141829", `${n}/5`)}${[0, 1, 2, 3, 4].map(ring).join("")}${text(110, 530, 30, "#0b7a57", "Checked on Doorbell")}`,
+    `${text(110, 230, 34, "#6b655b", "My ask scored")}${text(110, 420, 160, "#24211c", `${n}/5`)}${[0, 1, 2, 3, 4].map(ring).join("")}${text(110, 530, 30, "#108846", "Checked on Doorbell")}`,
   );
 };
 
@@ -94,7 +94,7 @@ export const rewriteSvg = (before?: string, after?: string) => {
   const b = int(before, 0, 5);
   const a = int(after, 0, 5);
   return frame(
-    `${text(110, 230, 34, "#5d6480", "My DM, before and after")}${text(110, 420, 150, "#b42318", `${b}/5`)}${text(520, 400, 90, "#5d6480", "→")}${text(700, 420, 150, "#0b7a57", `${a}/5`)}${text(110, 530, 30, "#0b7a57", "Checked on Doorbell")}`,
+    `${text(110, 230, 34, "#6b655b", "My DM, before and after")}${text(110, 420, 150, "#c22826", `${b}/5`)}<path d="M525 365H615M585 335l30 30-30 30" fill="none" stroke="#6b655b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>${text(700, 420, 150, "#108846", `${a}/5`)}${text(110, 530, 30, "#108846", "Checked on Doorbell")}`,
   );
 };
 
@@ -103,13 +103,13 @@ export const answeredSvg = (count?: string, minutes?: string) => {
   const m = int(minutes, 0, 99_999);
   const took = m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} days`;
   return frame(
-    `${text(110, 230, 34, "#5d6480", "All answered")}${text(110, 400, 140, "#141829", `${n} ${n === 1 ? "person" : "people"}`)}${text(110, 470, 40, "#5d6480", `got closure in ${took}`)}${text(110, 530, 30, "#0b7a57", "Every knock gets an answer")}`,
+    `${text(110, 230, 34, "#6b655b", "All answered")}${text(110, 400, 140, "#24211c", `${n} ${n === 1 ? "person" : "people"}`)}${text(110, 470, 40, "#6b655b", `got closure in ${took}`)}${text(110, 530, 30, "#108846", "Every knock gets an answer")}`,
   );
 };
 
 const png = async (svg: string) => {
   const font = await init();
-  return new Resvg(svg, { font: { fontBuffers: [font], defaultFontFamily: "Figtree", loadSystemFonts: false } }).render().asPng();
+  return new Resvg(svg, { font: { fontBuffers: [font], defaultFontFamily: "Schibsted Grotesk", loadSystemFonts: false } }).render().asPng();
 };
 
 export const ogPng = (d: DoorView) => png(ogSvg(d));
