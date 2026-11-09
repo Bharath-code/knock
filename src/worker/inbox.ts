@@ -80,6 +80,9 @@ export const answerKnock = async (db: D1Database, o: OwnerUser, knockId: string,
             .bind(knockId, now, o.userId),
         ]
       : []),
+    db
+      .prepare(`INSERT INTO audit_log (id, org_id, actor, action, target, at) SELECT ?4, k.org_id, ?3, ?5, k.id, ?2 FROM knocks k WHERE ${pending}`)
+      .bind(knockId, now, o.userId, crypto.randomUUID(), `inbox.${r.answer}`),
     ...(r.answer === "later"
       ? [
           db
@@ -115,10 +118,13 @@ export const undoKnock = async (db: D1Database, o: OwnerUser, knockId: string, n
     db
       .prepare(`UPDATE codes SET knock_id = NULL, assigned_at = NULL WHERE knock_id = ?1 AND EXISTS (${dec})`)
       .bind(knockId, since, o.userId),
+    db
+      .prepare(`INSERT INTO audit_log (id, org_id, actor, action, target, at) SELECT ?4, k.org_id, ?3, 'inbox.undo', k.id, ?5 FROM knocks k WHERE k.id = ?1 AND EXISTS (${dec})`)
+      .bind(knockId, since, o.userId, crypto.randomUUID(), now),
     db.prepare(`DELETE FROM reminders WHERE knock_id = ?1 AND EXISTS (${dec} AND d.answer = 'later')`).bind(knockId, since, o.userId),
     db.prepare(`DELETE FROM decisions WHERE id IN (${dec})`).bind(knockId, since, o.userId),
   ]);
-  return (done[5]?.meta.changes ?? 0) === 1;
+  return (done[6]?.meta.changes ?? 0) === 1;
 };
 
 const open = `k.status IN ('new', 'seen') AND k.expires_at > ?1 AND k.door_id IN (SELECT id FROM doors WHERE owner_user_id = ?2)`;

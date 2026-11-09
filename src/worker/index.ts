@@ -10,6 +10,7 @@ import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
+import { auditCsv, logAudit } from "./audit";
 import { badgeFor, badgeRows, badgeSvg, refreshDoorStats, setBadge } from "./stats";
 import { asKnockId, asRef, asTemplate } from "../shared/growth";
 import { sendClosure, sendDigest, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
@@ -160,7 +161,9 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     const { codes, bad } = parseCodes(b.text);
     if (bad.length) return c.json({ error: `Codes use 4 to 64 letters, digits, - or _. Fix: ${bad.slice(0, 3).join(", ")}` }, 400);
     if (!codes.length || codes.length > MAX_CODES) return c.json({ error: `Add between 1 and ${MAX_CODES} codes at a time.` }, 400);
-    return c.json(await addCodes(c.env.DB, c.env.CODES_KEY, b.doorId, o.orgId, codes));
+    const added = await addCodes(c.env.DB, c.env.CODES_KEY, b.doorId, o.orgId, codes);
+    await logAudit(c.env.DB, o, "settings.codes_added", `${codes.length} codes`);
+    return c.json(added);
   })
   .get("/account", async (c) => {
     const p = await personOfUser(c.env.DB, c.get("owner").userId);
@@ -173,6 +176,7 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     const p = await personOfUser(c.env.DB, c.get("owner").userId);
     if (!p) return c.json({ error: "That account no longer exists." }, 404);
     await setPrefs(c.env.DB, p.id, { tz: b.tz as string | undefined, digest: b.digest as boolean | undefined });
+    if (b.digest !== undefined) await logAudit(c.env.DB, c.get("owner"), "settings.digest", b.digest ? "on" : "off");
     return c.json({ ok: true, digest: await digestOn(c.env.DB, p.id) });
   })
   .post("/email", async (c) => {
@@ -208,9 +212,13 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     const url = blank ? null : bookingUrl(raw);
     if (!blank && !url) return c.json({ error: "Use an https link on cal.com or calendly.com." }, 400);
     await setBooking(c.env.DB, c.get("owner"), url);
+    await logAudit(c.env.DB, c.get("owner"), "settings.booking", url ? "set" : "cleared");
     return c.json({ url });
   })
   .get("/doors", async (c) => c.json(await ownerDoorIds(c.env.DB, c.get("owner"))))
+  .get("/audit.csv", async (c) =>
+    new Response(await auditCsv(c.env.DB, c.get("owner")), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="doorbell-audit.csv"', "cache-control": "private, no-store" } }),
+  )
   .get("/badges", async (c) => c.json(await badgeRows(c.env.DB, c.get("owner"))))
   .put(
     "/badges/:doorId",
@@ -220,7 +228,10 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     }),
     async (c) => {
       if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
-      return (await setBadge(c.env.DB, c.get("owner"), c.req.param("doorId"), c.req.valid("json").on)) ? c.json({ ok: true }) : c.json({ error: "That door isn't yours." }, 404);
+      const { on } = c.req.valid("json");
+      if (!(await setBadge(c.env.DB, c.get("owner"), c.req.param("doorId"), on))) return c.json({ error: "That door isn't yours." }, 404);
+      await logAudit(c.env.DB, c.get("owner"), "settings.badge", `${c.req.param("doorId")} ${on ? "on" : "off"}`);
+      return c.json({ ok: true });
     },
   )
   .post("/close-rest", async (c) => {
