@@ -115,6 +115,7 @@ const App = () => {
   const [account, setAccount] = useState<{ email: string | null; handle: string | null; digest: boolean } | null>(null);
   const [emailIn, setEmailIn] = useState("");
   const [pools, setPools] = useState<Pool[]>([]);
+  const [badges, setBadges] = useState<{ doorId: string; slug: string; handle: string | null; optin: boolean; pct: number | null; days: number; shown: boolean }[]>([]);
   const [poolDoor, setPoolDoor] = useState("");
   const [codeText, setCodeText] = useState("");
   const streak = useRef({ n: 0, t0: 0 });
@@ -156,6 +157,18 @@ const App = () => {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tz) api.inbox.prefs.$put({ json: { tz } }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.inbox.badges.$get().then(async (r) => r.ok && setBadges(await r.json())).catch(() => {});
+  }, []);
+
+  const setBadgeOn = (doorId: string, on: boolean) => run(`badge-${doorId}`, async () => {
+    const r = await api.inbox.badges[":doorId"].$put({ param: { doorId }, json: { on } }).catch(() => null);
+    if (!r?.ok) return fail("Couldn't save the badge setting.");
+    const list = await api.inbox.badges.$get().then((x) => (x.ok ? x.json() : null)).catch(() => null);
+    if (list) setBadges(list);
+    toast.success(on ? "Badge on. It appears once you qualify." : "Badge off.");
+  });
 
   const setDigest = (on: boolean) => run("digest", async () => {
     const r = await api.inbox.prefs.$put({ json: { digest: on } }).catch(() => null);
@@ -522,6 +535,40 @@ const App = () => {
                     </Field>
                     <Button disabled={!codeText.trim() || busy === "codes"} onClick={() => void addCodes()}><Busy k="codes" />Add codes</Button>
                   </>
+                )}
+              </Section>
+
+              <Section title="Answer-rate badge" desc="Show your 90-day answer rate on your bio or site. It appears only with 10 or more knocks and an answer rate of 80% or more, and hides itself if you drop below.">
+                {badges.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No doors yet. <a href="/new">Make a door</a></p>
+                ) : (
+                  badges.map((b) => {
+                    const door = `${location.origin}/d/${b.handle}${b.slug === "profile" ? "" : `/${b.slug}`}`;
+                    const img = `${location.origin}/d/${b.handle}/${b.slug}/badge.svg`;
+                    return (
+                      <div key={b.doorId} className="border-t pt-4 first:border-t-0 first:pt-0">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <Label htmlFor={`badge-${b.doorId}`}>{b.slug === "profile" ? "Your profile door" : b.slug}</Label>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {b.shown ? `Showing ${b.pct}%.` : b.optin ? `Hidden for now${b.pct === null ? ": needs 10 closed knocks." : `: ${b.pct}% is under 80%.`}` : "Off."}
+                            </p>
+                          </div>
+                          <Switch id={`badge-${b.doorId}`} className="mt-1" checked={b.optin} disabled={busy === `badge-${b.doorId}`} onCheckedChange={(v) => void setBadgeOn(b.doorId, v)} />
+                        </div>
+                        {b.shown && (
+                          <div className="mt-3 flex flex-col gap-3">
+                            <Field id={`embed-${b.doorId}`} label="Embed (Markdown)">
+                              <Input id={`embed-${b.doorId}`} readOnly value={`[![Doorbell](${img})](${door})`} className="font-mono text-sm" onFocus={(e) => e.currentTarget.select()} />
+                            </Field>
+                            <Field id={`bio-${b.doorId}`} label="Bio text">
+                              <Input id={`bio-${b.doorId}`} readOnly value={`I answer ${b.pct}% of knocks within ${b.days} days: ${door}`} className="text-sm" onFocus={(e) => e.currentTarget.select()} />
+                            </Field>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </Section>
 

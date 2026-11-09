@@ -10,6 +10,7 @@ import { Door } from "./door";
 import { CheckerPage } from "./checker-page";
 import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
+import { badgeFor, badgeRows, badgeSvg, refreshDoorStats, setBadge } from "./stats";
 import { asKnockId, asRef, asTemplate } from "../shared/growth";
 import { sendClosure, sendDigest, sendNewSignIn, sendCheckin, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
@@ -210,6 +211,18 @@ const inbox = new Hono<{ Bindings: Secrets; Variables: { owner: OwnerUser } }>()
     return c.json({ url });
   })
   .get("/doors", async (c) => c.json(await ownerDoorIds(c.env.DB, c.get("owner"))))
+  .get("/badges", async (c) => c.json(await badgeRows(c.env.DB, c.get("owner"))))
+  .put(
+    "/badges/:doorId",
+    validator("json", (v, c) => {
+      const on = ((v ?? {}) as { on?: unknown }).on;
+      return typeof on === "boolean" ? { on } : c.json({ error: "Say whether the badge is on or off." }, 400);
+    }),
+    async (c) => {
+      if (!sameOrigin(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
+      return (await setBadge(c.env.DB, c.get("owner"), c.req.param("doorId"), c.req.valid("json").on)) ? c.json({ ok: true }) : c.json({ error: "That door isn't yours." }, 404);
+    },
+  )
   .post("/close-rest", async (c) => {
     const closed = await closeRest(c.env.DB, c.get("owner"));
     if (closed.length) track(c.env.FUNNEL, "answered", "close_rest", "", closed.length);
@@ -452,6 +465,10 @@ const app = new Hono<AppEnv>()
     const door = await getDoor(c.env.DB, c.req.param("handle"), c.req.param("slug"));
     return door ? new Response((await ogPng(door)) as unknown as ArrayBuffer, { headers: { "content-type": "image/png", "cache-control": "public, max-age=300" } }) : c.notFound();
   })
+  .get("/d/:handle/:slug/badge.svg", async (c) => {
+    const b = await badgeFor(c.env.DB, c.req.param("handle"), c.req.param("slug"));
+    return b ? new Response(badgeSvg(b), { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=3600" } }) : c.notFound();
+  })
   .post("/d/:handle/:slug/knock", async (c) => {
     const slug = c.req.param("slug");
     const door = await getDoor(c.env.DB, c.req.param("handle"), slug);
@@ -676,6 +693,9 @@ export default {
     for (let i = 0; i < checkins.length; i += 100) await env.JOBS.sendBatch(checkins.slice(i, i + 100).map((body) => ({ body })));
     const reminders = await dueReminders(env.DB, Date.now());
     for (let i = 0; i < reminders.length; i += 100) await env.JOBS.sendBatch(reminders.slice(i, i + 100).map((body) => ({ body })));
+    // Nightly: the first 15-minute run after 02:00 UTC.
+    const at = new Date(event.scheduledTime);
+    if (at.getUTCHours() === 2 && at.getUTCMinutes() < 15) await refreshDoorStats(env.DB);
     const digests = await digestJobs(env.DB);
     for (let i = 0; i < digests.length; i += 100) await env.JOBS.sendBatch(digests.slice(i, i + 100).map((body) => ({ body })));
   },
