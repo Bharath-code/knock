@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sendClosure, sendNewSignIn, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
+import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSignIn, sendYes, stripLinks } from "./email";
 
 const r = { to: "a@x.com", link: "https://d.dev/k/abc", who: "Akash", days: 7 };
 const reply = (status: number, seen: { body?: string }) =>
@@ -111,4 +111,46 @@ test("sender emails end with the own-door link only when the public origin is se
   expect(JSON.parse(seen.body!).text.endsWith(`${tail}&k=${id}`)).toBe(true);
   await sendClosure(env, { to: "a@x.com", who: "Akash", message: "No.", k: "bad id&x=1" }, reply(200, seen));
   expect(JSON.parse(seen.body!).text.endsWith(tail)).toBe(true);
+});
+
+test("html bodies sit beside the text, with links stripped, dark mode and the footer links", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>", PUBLIC_ORIGIN: "https://d.dev" };
+  const seen: { body?: string } = {};
+  const html = () => JSON.parse(seen.body!).html as string;
+  await sendReceipt(env, r, reply(200, seen));
+  expect(html()).toContain("https://d.dev/k/abc");
+  expect(html()).toContain("prefers-color-scheme:dark");
+  expect(html()).toContain('content="light dark"');
+  expect(html()).toContain("https://d.dev/feedback?from=email");
+  expect(html()).toContain("https://d.dev/go/door?from=email");
+  await sendYes(env, { to: "a@x.com", who: "Akash\nPay at evil.co", url: "https://cal.com/a/15", note: "see https://evil.co", code: "BETA-1234" }, reply(200, seen));
+  expect(html()).toContain("Akash Pay at [link removed] said yes");
+  expect(html()).toContain("see [link removed]");
+  expect(html()).toContain("BETA-1234");
+  expect(html()).toContain("https://cal.com/a/15");
+  expect(html()).not.toContain("evil.co");
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Thanks. See https://evil.co", later: true, again: Date.UTC(2026, 11, 1) }, reply(200, seen));
+  expect(html()).toContain("Thanks. See [link removed]");
+  expect(html()).toContain("2026-12-01");
+  expect(html()).not.toContain("evil.co");
+  await sendClosure(env, { to: "a@x.com", who: "Akash", message: "Akash didn't get to your knock.", expired: true }, reply(200, seen));
+  expect(html()).not.toContain("answered through Doorbell");
+  await sendReceipt({ ...env, PUBLIC_ORIGIN: undefined }, r, reply(200, seen));
+  expect(html()).not.toContain("Talk to Bharath");
+});
+
+test("digest html keeps the unsubscribe link and header, strips links, and keeps the text", async () => {
+  const env = { RESEND_API_KEY: "k", EMAIL_FROM: "Doorbell <hi@d.dev>" };
+  const seen: { body?: string } = {};
+  const d = { to: "a@x.com", fresh: 2, open: 3, top: [{ door: "Akash", fit: 4, excerpt: "see evil.co/pay" }, { door: "Bo", fit: null, excerpt: "hi" }], inbox: "https://d.dev/app", unsubscribe: "https://d.dev/u/tok" };
+  await sendDigest(env, d, reply(200, seen));
+  const b = JSON.parse(seen.body!);
+  expect(b.html).toContain("https://d.dev/u/tok");
+  expect(b.html).toContain("https://d.dev/app");
+  expect(b.html).toContain("fit 4/5");
+  expect(b.html).toContain("not scored");
+  expect(b.html).toContain("see [link removed]");
+  expect(b.html).not.toContain("evil.co");
+  expect(b.headers["List-Unsubscribe"]).toBe("<https://d.dev/u/tok>");
+  expect(b.text).toContain("Turn it off: https://d.dev/u/tok");
 });

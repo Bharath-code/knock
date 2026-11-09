@@ -4,6 +4,11 @@ export type Release = { date: string; title: string; points: string[] };
 export const CHANGELOG: Release[] = [
   {
     date: "2026-11-09",
+    title: "Better-looking emails",
+    points: ["Receipts, Yes, No, Not now, expired and digest emails now have a clean layout with a button, and follow your light or dark mode."],
+  },
+  {
+    date: "2026-11-09",
     title: "Template gallery",
     points: [
       "Copy the setup of a public door that answers at least 80% of knocks: its questions and window, never its knocks.",
