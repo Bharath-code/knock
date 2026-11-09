@@ -82,7 +82,7 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
                 type="button"
                 aria-pressed={pick === n}
                 onClick={() => setPick(pick === n ? null : n)}
-                className="inline-flex min-h-11 items-center rounded-full border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-brass-soft aria-pressed:text-foreground sm:min-h-8"
+                className="inline-flex min-h-11 items-center rounded-full border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-brass-soft aria-pressed:text-foreground sm:min-h-9"
               >
                 {x.label}
               </button>
