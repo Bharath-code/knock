@@ -43,6 +43,10 @@ const INJECTION = new RegExp(
   "gi",
 );
 
+// A chip is a claim shown to the receiver, so it also may not quote anything that reads like an order to the scorer.
+export const instructionLike = (s: string) =>
+  redact(s).hit || /\b(?:fit|score|rating)\s*(?:of\s*)?[1-5]\b|\b(?:evaluator|ranking model|scoring rules)\b|\bexceptional candidate\b|[‹<]\s*\/?\s*system/i.test(s);
+
 export const redact = (s: string) => {
   let hit = false;
   const text = s.replace(INJECTION, () => ((hit = true), "[removed]"));
@@ -123,7 +127,8 @@ export const haikuRanker = (client: Pick<Anthropic, "messages">): Ranker => ({
       else if (p && (p.spam || (p.fit >= 1 && p.fit <= 5))) {
         const fit = Math.min(5, Math.max(1, p.fit));
         const evidence = c.injected ? ["Removed text that tried to instruct the scorer"] : [];
-        const chips = p.evidence.slice(0, 3).map((e) => ({ label: sanitize(e.chip, 40), quote: sanitize(e.quote, 80) }));
+        // No "why this fits" on spam, and no chip may quote instruction-like text: a chip is a claim shown to the receiver.
+        const chips = p.spam ? [] : p.evidence.filter((e) => !instructionLike(e.quote) && !instructionLike(e.chip)).slice(0, 3).map((e) => ({ label: sanitize(e.chip, 40), quote: sanitize(e.quote, 80) }));
         outcome = { ok: true, rank: { fit, spam: p.spam, bucket: bucketOf(fit, p.spam), ranker: "haiku", evidence, chips } };
       }
     } catch (e) {
