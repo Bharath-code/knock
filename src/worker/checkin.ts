@@ -1,5 +1,6 @@
 import { PLACEHOLDER } from "./auth";
 import { randomHex, sha256 } from "./doors";
+import { stripLinks } from "./email";
 
 const DAY = 86_400_000;
 export const CHECKIN_AFTER = 7 * DAY;
@@ -8,7 +9,17 @@ const CHECKIN_UNTIL = 21 * DAY;
 const BATCH = 50;
 
 export type Side = "sender" | "receiver";
-export type CheckinJob = { type: "checkin"; to: string; side: Side; who: string; token: string };
+export type CheckinJob = { type: "checkin"; to: string; side: Side; who: string; token: string; about: string };
+
+// Tells two Yes answers apart: the door, and the start of what the sender wrote. Links are masked.
+const about = (kind: string, postText: string | null, answersJson: string) => {
+  const line = (postText ?? "").split("\n")[0]!.slice(0, 70);
+  const door = kind === "profile" ? "a profile door" : line ? `"${line}"` : "a door";
+  let msg = "";
+  try { msg = (JSON.parse(answersJson) as { message?: string }).message ?? ""; } catch { /* malformed row: door alone */ }
+  const excerpt = stripLinks(msg).slice(0, 80);
+  return excerpt ? `${door}: "${excerpt}"` : door;
+};
 
 // What "it happened" means per template; anything unknown counts as a connection.
 const HAPPENED: Record<string, string> = { referral: "referred", beta: "tried", gig: "connected" };
@@ -19,39 +30,39 @@ export const happenedType = (template: string) => HAPPENED[template] ?? "connect
 export const dueCheckins = async (db: D1Database, now: number): Promise<CheckinJob[]> => {
   const { results } = await db
     .prepare(
-      `SELECT d.knock_id AS id, s.email AS sender, r.email AS receiver, COALESCE(r.display_name, '@' || r.handle) AS who
+      `SELECT d.knock_id AS id, s.email AS sender, r.email AS receiver, COALESCE(NULLIF(r.display_name, ''), '@' || r.handle) AS who, dr.kind, dr.post_text AS post, k.answers_json AS answers
        FROM decisions d JOIN knocks k ON k.id = d.knock_id JOIN people s ON s.id = k.person_id
        JOIN doors dr ON dr.id = k.door_id JOIN users u ON u.id = dr.owner_user_id JOIN people r ON r.id = u.person_id
        WHERE d.answer = 'yes' AND d.at <= ?1 AND d.at > ?2 AND NOT EXISTS (SELECT 1 FROM checkins c WHERE c.knock_id = d.knock_id)
        LIMIT ${BATCH}`,
     )
     .bind(now - CHECKIN_AFTER, now - CHECKIN_UNTIL)
-    .all<{ id: string; sender: string; receiver: string; who: string }>();
+    .all<{ id: string; sender: string; receiver: string; who: string; kind: string; post: string | null; answers: string }>();
   const jobs: CheckinJob[] = [];
   for (const r of results) {
     for (const [side, to] of [["sender", r.sender], ["receiver", r.receiver]] as const) {
       const token = randomHex(16);
       const w = await db.prepare("INSERT OR IGNORE INTO checkins (knock_id, side, token_hash, sent_at) VALUES (?1, ?2, ?3, ?4)").bind(r.id, side, await sha256(token), now).run();
-      if ((w.meta.changes ?? 0) === 1 && !to.endsWith(PLACEHOLDER)) jobs.push({ type: "checkin", to, side, who: r.who, token });
+      if ((w.meta.changes ?? 0) === 1 && !to.endsWith(PLACEHOLDER)) jobs.push({ type: "checkin", to, side, who: r.who, token, about: about(r.kind, r.post, r.answers) });
     }
   }
   return jobs;
 };
 
-export type CheckinView = { side: Side; who: string; done: boolean };
+export type CheckinView = { side: Side; who: string; about: string; done: boolean };
 
 export const checkinView = async (db: D1Database, token: string): Promise<CheckinView | null> => {
   if (!/^[0-9a-f]{32}$/.test(token)) return null;
   const r = await db
     .prepare(
-      `SELECT c.side, COALESCE(p.display_name, '@' || p.handle) AS who,
+      `SELECT c.side, COALESCE(NULLIF(p.display_name, ''), '@' || p.handle) AS who, d.kind, d.post_text AS post, k.answers_json AS answers,
               EXISTS (SELECT 1 FROM outcomes o WHERE o.knock_id = c.knock_id AND o.reported_by = c.side) AS done
        FROM checkins c JOIN knocks k ON k.id = c.knock_id JOIN doors d ON d.id = k.door_id JOIN users u ON u.id = d.owner_user_id JOIN people p ON p.id = u.person_id
        WHERE c.token_hash = ?1`,
     )
     .bind(await sha256(token))
-    .first<{ side: Side; who: string; done: number }>();
-  return r ? { side: r.side, who: r.who, done: r.done === 1 } : null;
+    .first<{ side: Side; who: string; kind: string; post: string | null; answers: string; done: number }>();
+  return r ? { side: r.side, who: r.who, about: about(r.kind, r.post, r.answers), done: r.done === 1 } : null;
 };
 
 // Stores one outcome per side. The first real outcome of a knock bumps the door and sender counters once;

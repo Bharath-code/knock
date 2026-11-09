@@ -89,7 +89,7 @@ export const SeenOffPage = ({ token, valid, done }: { token: string; valid: bool
   </Shell>
 );
 
-export const OutcomePage = ({ token, view, done }: { token: string; view: { side: string; who: string } | null; done?: boolean }) => (
+export const OutcomePage = ({ token, view, done }: { token: string; view: { side: string; who: string; about: string } | null; done?: boolean }) => (
   <Shell title="Did it happen? | Doorbell" description="Tell us how it went." head={<meta name="robots" content="noindex, nofollow" />}>
     <h1 class="text-3xl">{done ? "Thanks, that helps" : "Did it happen?"}</h1>
     {!view ? (
@@ -99,7 +99,7 @@ export const OutcomePage = ({ token, view, done }: { token: string; view: { side
     ) : (
       <>
         <p class="mt-3 text-lg text-muted-foreground">
-          {view.side === "sender" ? `${view.who} said yes to your knock. Did you end up connecting?` : "You said yes to a knock. Did it lead to a conversation?"}
+          {view.side === "sender" ? `${view.who} said yes to your knock on ${view.about}. Did you end up connecting?` : `You said yes to a knock on ${view.about}. Did it lead to a conversation?`}
         </p>
         <form method="post" action={`/o/${token}`} class="mt-8 flex flex-col gap-3 sm:flex-row">
           <button name="happened" value="1" class={button}>Yes, it happened</button>

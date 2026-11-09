@@ -30,6 +30,17 @@ test("a Yes gets one check-in per side after 7 days, never before, never twice, 
   expect(await dueCheckins(db, T0 + 8 * DAY)).toEqual([]);
 });
 
+test("each check-in says which Yes it is about, with links masked", async () => {
+  const { db, sqlite } = await setup();
+  sqlite.run(`UPDATE knocks SET answers_json = '{"message":"Hi, see https://evil.co/x for my work"}' WHERE id = 'a'`);
+  sqlite.run(`UPDATE doors SET kind = 'post', post_text = 'Referring one engineer\nmore text'`);
+  const jobs = await dueCheckins(db, T0 + 7 * DAY);
+  const mine = jobs.filter((j) => j.to === "a@x.com" || j.about.includes("evil") || j.about.includes("[link"));
+  expect(mine.map((j) => j.about)).toContain('"Referring one engineer": "Hi, see [link removed] for my work"');
+  const [first] = jobs;
+  expect(await checkinView(db, first!.token)).toMatchObject({ about: first!.about });
+});
+
 test("a Yes older than three weeks is not chased", async () => {
   const { db } = await setup();
   expect(await dueCheckins(db, T0 + 22 * DAY)).toEqual([]);
@@ -38,7 +49,7 @@ test("a Yes older than three weeks is not chased", async () => {
 test("each side reports once; the first real outcome counts once; both real outcomes confirm each other", async () => {
   const { db, sqlite } = await setup();
   const [a, b] = await dueCheckins(db, T0 + 7 * DAY);
-  expect(await checkinView(db, a!.token)).toEqual({ side: a!.side, who: "Riya", done: false });
+  expect(await checkinView(db, a!.token)).toMatchObject({ side: a!.side, who: "Riya", done: false });
   expect(await recordOutcome(db, a!.token, true)).toBe("ok");
   expect(await recordOutcome(db, a!.token, false)).toBe("done");
   expect(await checkinView(db, a!.token)).toMatchObject({ done: true });

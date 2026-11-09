@@ -604,7 +604,7 @@ export default {
         const origin = (env as Secrets).PUBLIC_ORIGIN;
         try {
           if (!origin) throw new Error("PUBLIC_ORIGIN missing");
-          const sent = await sendCheckin(env as Secrets, { to: ck.to, side: ck.side, who: ck.who, link: new URL(`/o/${ck.token}`, origin).href });
+          const sent = await sendCheckin(env as Secrets, { to: ck.to, side: ck.side, who: ck.who, about: ck.about, link: new URL(`/o/${ck.token}`, origin).href });
           if (sent === "unconfigured") console.warn("checkin not sent: RESEND_API_KEY or EMAIL_FROM missing");
           message.ack();
         } catch (e) {
