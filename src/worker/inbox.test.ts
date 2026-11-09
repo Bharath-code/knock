@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { keyAction, NOTE_MAX, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
+import { keyAction, NOTE_MAX, popUndo, pushUndo, safeProof, sortCards, swipeAnswer, type InboxCard } from "../shared/inbox";
 import { bookingUrl } from "../shared/booking";
 import { closureMessage } from "../shared/closure";
 import { parseCodes } from "../shared/codes";
@@ -40,6 +40,29 @@ test("answer removes the card once; undo within 5 s restores it, later does not"
   expect((await listInbox(db, owner, now)).map((c) => c.id)).toEqual(["high", "low", "none"]);
   expect(sqlite.query("SELECT answered_in_window n FROM door_stats").get()).toEqual({ n: 0 });
   expect(await answerKnock(db, { userId: "other", orgId: "o" }, "low", { answer: "no" }, now)).toBe(false);
+});
+
+test("answering a second card keeps the first undoable within its own window, newest first", async () => {
+  const { db, sqlite } = await fakeDb();
+  const now = Date.now();
+  seed(sqlite, now);
+  expect(await answerKnock(db, owner, "high", { answer: "yes" }, now)).toBe(true);
+  expect(await answerKnock(db, owner, "low", { answer: "no" }, now + 3_000)).toBe(true);
+  expect(await undoKnock(db, owner, "low", now + 4_000)).toBe(true);
+  expect(await undoKnock(db, owner, "high", now + 4_500)).toBe(true);
+  expect((await listInbox(db, owner, now)).map((c) => c.id)).toEqual(["high", "low", "none"]);
+});
+
+test("undo stack keeps each answer for its own 5 s and pops the newest first", () => {
+  let s = pushUndo([], "a", 0);
+  s = pushUndo(s, "b", 3_000);
+  expect(s.map((e) => e.item)).toEqual(["a", "b"]);
+  const mid = popUndo(s, 4_000);
+  expect([mid.entry?.item, mid.rest.map((e) => e.item)]).toEqual(["b", ["a"]]);
+  const late = popUndo(s, 6_000);
+  expect([late.entry?.item, late.rest]).toEqual(["b", []]);
+  expect(popUndo(s, 9_000).entry).toBeNull();
+  expect(pushUndo(s, "c", 6_000).map((e) => e.item)).toEqual(["b", "c"]);
 });
 
 test("swipe and key maps", () => {

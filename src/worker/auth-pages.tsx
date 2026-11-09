@@ -111,17 +111,17 @@ export const OutcomePage = ({ token, view, done }: { token: string; view: { side
 );
 
 export const UnsubscribePage =({ token, valid, done }: { token: string; valid: boolean; done?: boolean }) => (
-  <Shell title="Daily digest | Doorbell" description="Turn off the daily digest." head={<meta name="robots" content="noindex, nofollow" />}>
-    <h1 class="text-3xl">{done ? "You're unsubscribed" : "Turn off the daily digest?"}</h1>
+  <Shell title="Email summaries | Doorbell" description="Turn off the daily digest and weekly summary." head={<meta name="robots" content="noindex, nofollow" />}>
+    <h1 class="text-3xl">{done ? "You're unsubscribed" : "Turn off the daily and weekly emails?"}</h1>
     {!valid ? (
-      <p role="alert" class={`mt-6 ${alert}`}>This link is not valid. You can turn the digest off in your inbox settings.</p>
+      <p role="alert" class={`mt-6 ${alert}`}>This link is not valid. You can turn the emails off in your inbox settings.</p>
     ) : done ? (
-      <p class="mt-3 text-lg text-muted-foreground">No more daily digests. Turn it back on any time in your inbox settings.</p>
+      <p class="mt-3 text-lg text-muted-foreground">No more daily digests or weekly summaries. Turn it back on any time in your inbox settings.</p>
     ) : (
       <>
-        <p class="mt-3 text-lg text-muted-foreground">You'll stop getting the once-a-day email about new knocks. Your door and inbox keep working.</p>
+        <p class="mt-3 text-lg text-muted-foreground">You'll stop getting the once-a-day email about new knocks and the weekly count of people you answered. Your door and inbox keep working.</p>
         <form method="post" action={`/u/${token}`} class="mt-8">
-          <button class={button}>Turn off digest</button>
+          <button class={button}>Turn off emails</button>
         </form>
       </>
     )}
