@@ -11,8 +11,9 @@ import { CheckerPage } from "./checker-page";
 import { DeletedPage, DoorPage, ExamplePage, NewDoorPage, NotFoundDoor, PrivacyPage, StatusPage } from "./door-pages";
 import { deleteByToken, purgeClosed } from "./retention";
 import { asKnockId, asRef, asTemplate } from "../shared/growth";
-import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
+import { sendClosure, sendDigest, sendNewSignIn, sendReceipt, sendReminder, sendSeen, sendSignIn, sendYes, type Closure, type Receipt } from "./email";
 import { digestJobs, digestOn, setPrefs, tokenValid, unsubscribe, validTz, type DigestJob } from "./digest";
+import { dueReminders, REMIND_MS, type ReminderJob } from "./reminders";
 import { seenJobs, seenOff, stillSeen, type SeenJob } from "./seen";
 import { confirmLink, deviceLabel, peekLink, personOfUser, PLACEHOLDER, pruneAuth, requestLink, SESSION_MS, signOut, signOutEverywhere } from "./auth";
 import { ConfirmPage, SeenOffPage, SigninPage, UnsubscribePage } from "./auth-pages";
@@ -547,7 +548,7 @@ export default {
   fetch: app.fetch,
   async queue(batch, env) {
     for (const message of batch.messages) {
-      const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type"> & Partial<Pick<CloseJob, "later">>;
+      const job = message.body as { type?: string; who: string } & Receipt & Closure & Omit<YesJob, "type"> & Partial<Pick<CloseJob, "later" | "at">>;
       if (job.type === "rank") {
         const { knockId, doorId } = message.body as { knockId: string; doorId: string };
         try {
@@ -582,6 +583,20 @@ export default {
         }
         continue;
       }
+      if (job.type === "reminder") {
+        const r = message.body as ReminderJob;
+        const origin = (env as Secrets).PUBLIC_ORIGIN;
+        try {
+          if (!origin) throw new Error("PUBLIC_ORIGIN missing");
+          const sent = await sendReminder(env as Secrets, { to: r.to, who: r.who, link: new URL(r.path, origin).href });
+          if (sent === "unconfigured") console.warn("reminder not sent: RESEND_API_KEY or EMAIL_FROM missing");
+          message.ack();
+        } catch (e) {
+          console.error("reminder failed", e instanceof Error ? e.message : e);
+          message.retry({ delaySeconds: 60 });
+        }
+        continue;
+      }
       if (job.type === "seen") {
         const s = message.body as SeenJob;
         const origin = (env as Secrets).PUBLIC_ORIGIN;
@@ -612,7 +627,7 @@ export default {
           ? sendReceipt(env as Secrets, job)
           : job.type === "yes"
             ? sendYes(env as Secrets, { ...job, k: job.knockId, code: await codeFor(env.DB, (env as Secrets).CODES_KEY, job.knockId) })
-            : sendClosure(env as Secrets, { ...job, k: job.k ?? job.knockId }));
+            : sendClosure(env as Secrets, { ...job, k: job.k ?? job.knockId, again: job.later && job.at ? job.at + REMIND_MS : undefined }));
         if (sent === "unconfigured") console.warn(`${job.type} not sent: RESEND_API_KEY or EMAIL_FROM missing`);
         message.ack();
       } catch (e) {
@@ -627,6 +642,8 @@ export default {
     await pruneAuth(env.DB);
     await notifyExpired(env.JOBS, await closeExpired(env.DB, null));
     await purgeClosed(env.DB);
+    const reminders = await dueReminders(env.DB, Date.now());
+    for (let i = 0; i < reminders.length; i += 100) await env.JOBS.sendBatch(reminders.slice(i, i + 100).map((body) => ({ body })));
     const digests = await digestJobs(env.DB);
     for (let i = 0; i < digests.length; i += 100) await env.JOBS.sendBatch(digests.slice(i, i + 100).map((body) => ({ body })));
   },

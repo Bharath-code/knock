@@ -1,6 +1,7 @@
 import { CLOSE_MESSAGE, CLOSE_REASON, UNDO_MS, type InboxCard, type Reply } from "../shared/inbox";
 import { SESSION_SQL, sessionBinds, touchSession } from "./auth";
 import { sha256 } from "./doors";
+import { REMIND_MS } from "./reminders";
 
 export type OwnerUser = { userId: string; orgId: string };
 
@@ -75,6 +76,13 @@ export const answerKnock = async (db: D1Database, o: OwnerUser, knockId: string,
             .bind(knockId, now, o.userId),
         ]
       : []),
+    ...(r.answer === "later"
+      ? [
+          db
+            .prepare(`INSERT OR REPLACE INTO reminders (knock_id, person_id, door_id, remind_at) SELECT k.id, k.person_id, k.door_id, ?4 FROM knocks k WHERE ${pending}`)
+            .bind(knockId, now, o.userId, now + REMIND_MS),
+        ]
+      : []),
     db
       .prepare(`UPDATE knocks AS k SET status = 'answered', answered_at = ?2, seen_at = COALESCE(seen_at, ?2) WHERE ${pending}`)
       .bind(knockId, now, o.userId),
@@ -103,9 +111,10 @@ export const undoKnock = async (db: D1Database, o: OwnerUser, knockId: string, n
     db
       .prepare(`UPDATE codes SET knock_id = NULL, assigned_at = NULL WHERE knock_id = ?1 AND EXISTS (${dec})`)
       .bind(knockId, since, o.userId),
+    db.prepare(`DELETE FROM reminders WHERE knock_id = ?1 AND EXISTS (${dec} AND d.answer = 'later')`).bind(knockId, since, o.userId),
     db.prepare(`DELETE FROM decisions WHERE id IN (${dec})`).bind(knockId, since, o.userId),
   ]);
-  return (done[4]?.meta.changes ?? 0) === 1;
+  return (done[5]?.meta.changes ?? 0) === 1;
 };
 
 const open = `k.status IN ('new', 'seen') AND k.expires_at > ?1 AND k.door_id IN (SELECT id FROM doors WHERE owner_user_id = ?2)`;

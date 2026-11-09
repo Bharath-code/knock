@@ -7,7 +7,7 @@ const BATCH = 500;
 const closedBefore = `(status = 'answered' AND COALESCE(answered_at, expires_at) < ?1) OR (status = 'expired' AND expires_at < ?1)`;
 
 // Senders who no longer have any knock and never made a door. Owners keep their person row.
-const ORPHANS = `DELETE FROM people WHERE id NOT IN (SELECT person_id FROM users) AND id NOT IN (SELECT person_id FROM knocks)`;
+const ORPHANS = `DELETE FROM people WHERE id NOT IN (SELECT person_id FROM users) AND id NOT IN (SELECT person_id FROM knocks) AND id NOT IN (SELECT person_id FROM reminders WHERE sent_at IS NULL)`;
 
 // Decisions, outcomes and passes go with the knock (ON DELETE CASCADE); an assigned invite code stays assigned.
 // ponytail: 500 knocks per cron run and a full orphan scan; page by created_at if either shows up in cron time
@@ -28,6 +28,7 @@ export const deleteByToken = async (db: D1Database, token: string) => {
     ...(k.status === "new" || k.status === "seen"
       ? [db.prepare("UPDATE door_stats SET knocks_total = MAX(knocks_total - 1, 0), updated_at = ?2 WHERE door_id = ?1").bind(k.door_id, Date.now())]
       : []),
+    db.prepare("DELETE FROM reminders WHERE knock_id = ?1").bind(k.id),
     db.prepare("DELETE FROM knocks WHERE id = ?1").bind(k.id),
     db.prepare("DELETE FROM people WHERE id = ?1 AND id NOT IN (SELECT person_id FROM users) AND id NOT IN (SELECT person_id FROM knocks)").bind(k.person_id),
   ]);
