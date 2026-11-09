@@ -14,7 +14,7 @@ const seed = (s: Database, now: number) => {
   s.run(`INSERT INTO orgs VALUES ('o','o','free',1);
     INSERT INTO people (id,email,email_hash,display_name,handle,created_at) VALUES ('p','r@x','h',  'Riya','riya',1),('q','a@x','h0','Arjun','arjun',1),('s1','one@x','h1',NULL,NULL,1),('s2','two@x','h2',NULL,NULL,1);
     INSERT INTO users VALUES ('u','o','p','owner',1),('v','o','q','owner',1);
-    INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('d','o','u','profile','profile','profile','["Why?"]',1),('e','o','v','profile','profile','profile','["Why?"]',1),('f','o','u','side','post','referral','["Why?"]',1);
+    INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,created_at) VALUES ('d','o','u','profile','profile','profile','["Why?"]',1),('e','o','v','profile','profile','profile','["Your GitHub?"]',1),('f','o','u','side','post','referral','["Why?"]',1);
     INSERT INTO doors (id,org_id,owner_user_id,slug,kind,template,fields_json,status,created_at) VALUES ('x','o','v','old','post','referral','[]','closed',1);
     INSERT INTO door_stats (door_id,org_id,updated_at) VALUES ('d','o',1),('e','o',1),('f','o',1); INSERT INTO person_stats (person_id,updated_at) VALUES ('s1',1),('s2',1);`);
   const k = (id: string, door: string, p: string) =>
@@ -86,6 +86,7 @@ test("nothing reaches the new door until the one tap; confirm creates one linked
   expect(p.status).toBe("accepted");
   expect(p.c).toBe(now);
   expect(p.n).toBe(first.ok && !first.already ? first.id : "");
+  expect(JSON.parse((sqlite.query("SELECT answers_json a FROM knocks WHERE id = ?1").get(first.ok && !first.already ? first.id : "") as { a: string }).a).answers).toEqual([{ q: "Why?", a: "because" }]);
   expect(await confirmPass(env, "0".repeat(32), "ip", now)).toEqual({ ok: false, reason: "invalid" });
 });
 

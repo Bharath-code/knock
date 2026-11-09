@@ -368,6 +368,7 @@ const App = () => {
     if (!card || !to) return;
     const text = passNote.trim();
     setPassOpen(false);
+    setPassDoor("");
     setPassNote("");
     setPassLink("");
     answered.current.add(card.id);

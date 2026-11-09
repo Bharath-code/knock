@@ -124,7 +124,7 @@ export type Confirm =
 
 type Row = {
   id: string; status: string; at: number; from: string; note: string | null; by: string | null; toDoor: string; org: string; days: number; open: string;
-  fields: string; answers: string; proof: string | null; person: string; email: string; who: string;
+  answers: string; proof: string | null; person: string; email: string; who: string;
 };
 
 // The one tap. Re-checks everything, claims the pass first so two taps cannot create two knocks, then lets the
@@ -135,7 +135,7 @@ export const confirmPass = async (env: Pick<Env, "DB" | "DOOR">, token: string, 
   const r = await db
     .prepare(
       `SELECT ps.id, ps.status, ps.created_at AS at, ps.from_knock_id AS "from", ps.note, ps.by_name AS by, ps.to_door_id AS toDoor, td.org_id AS org, td.window_days AS days, td.status AS open,
-              td.fields_json AS fields, k.answers_json AS answers, k.proof_url AS proof, k.person_id AS person, sp.email, ${name("tp")} AS who
+              k.answers_json AS answers, k.proof_url AS proof, k.person_id AS person, sp.email, ${name("tp")} AS who
        FROM passes ps JOIN knocks k ON k.id = ps.from_knock_id JOIN people sp ON sp.id = k.person_id
        JOIN doors td ON td.id = ps.to_door_id JOIN users tu ON tu.id = td.owner_user_id JOIN people tp ON tp.id = tu.person_id
        WHERE ps.token_hash = ?1`,
@@ -150,16 +150,14 @@ export const confirmPass = async (env: Pick<Env, "DB" | "DOOR">, token: string, 
   const claim = await db.prepare("UPDATE passes SET status = 'accepted', sender_consent_at = ?2 WHERE id = ?1 AND status = 'pending'").bind(r.id, now).run();
   if ((claim.meta.changes ?? 0) !== 1) return { ok: true, already: true };
   const release = () => db.prepare("UPDATE passes SET status = 'pending', sender_consent_at = NULL WHERE id = ?1").bind(r.id).run();
-  let body: { message?: string; answers?: { a: string }[] } = {};
+  let body: { message?: string; answers?: { q: string; a: string }[] } = {};
   try { body = JSON.parse(r.answers); } catch { /* unreadable answers: the new receiver gets the note alone */ }
-  let qs: string[] = [];
-  try { qs = JSON.parse(r.fields) as string[]; } catch { /* no questions */ }
   const message = `${r.note ? `Passed by ${r.by ?? "a receiver"}: ${r.note}\n\n` : ""}${body.message ?? ""}`.slice(0, 2000);
   try {
     const result = await env.DOOR.getByName(r.toDoor).knock(
       {
         orgId: r.org, doorId: r.toDoor, windowDays: r.days, email: r.email, key: emailKey(r.email), message,
-        answers: qs.map((q, i) => ({ q, a: body.answers?.[i]?.a || "See the message." })), proof: r.proof ?? "", source: "pass", passedFrom: r.from,
+        answers: body.answers ?? [], proof: r.proof ?? "", source: "pass", passedFrom: r.from,
       },
       ip,
     );
