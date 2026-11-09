@@ -28,7 +28,7 @@ const sql: string[] = [
 ];
 
 const door = (id: string, slug: string, kind: string, template: string, post: string, fields: string[], days: number, status = "open") =>
-  sql.push(row("doors", { id, org_id: "seed-org", owner_user_id: "seed-user", slug, kind, template, post_text: post || null, fields_json: JSON.stringify(fields), window_days: days, status, created_at: now - 48 * H }));
+  sql.push(row("doors", { id, org_id: "seed-org", owner_user_id: "seed-user", slug, kind, template, post_text: post || null, fields_json: JSON.stringify(fields), window_days: days, status, listed_optin: id === "seed-d-gig" ? 1 : 0, created_at: now - 48 * H }));
 
 door("seed-d-profile", "profile", "profile", "profile", "", profileFields, 7);
 door("seed-d-referral", "hiring-go-engineer-pune", "post", "referral", "Hiring a Go backend engineer in Pune. Referrals welcome, send your resume and one project.", defaultFields.referral, 7);
@@ -69,6 +69,7 @@ for (const k of knocks) {
 }
 sql.push(
   row("door_stats", { door_id: "seed-d-referral", org_id: "seed-org", knocks_total: 6, answered_in_window: 4, outcomes_total: 0, passes_out: 0, updated_at: now }),
+  row("door_stats", { door_id: "seed-d-gig", org_id: "seed-org", knocks_total: 12, answered_in_window: 11, answer_rate_90d: 0.9, outcomes_total: 0, passes_out: 0, updated_at: now }),
   row("door_stats", { door_id: "seed-d-beta", org_id: "seed-org", knocks_total: 2, answered_in_window: 0, outcomes_total: 0, passes_out: 0, updated_at: now }),
 );
 

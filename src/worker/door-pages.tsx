@@ -7,6 +7,7 @@ import { ownDoorPath, REF_LINE, STARTER, type Ref } from "../shared/growth";
 import { CHANGELOG } from "../shared/changelog";
 import { FAQ } from "../shared/faq";
 import { answerRate, defaultFields, replyLine, templates, WINDOWS, type Template } from "../shared/door";
+import type { GalleryRow } from "./gallery";
 import type { DoorView, Owner } from "./doors";
 import { KnockFormView, StatusBody, type KnockForm } from "./knock-pages";
 import type { Status } from "./knocks";
@@ -86,9 +87,10 @@ export type NewState = {
   fields?: string[];
   window?: number;
   error?: string;
+  copied?: boolean;
 };
 
-export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", template, fields, window = 7, error, ref, k, starter }: NewState) => {
+export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", template, fields, window = 7, error, ref, k, starter, copied }: NewState) => {
   post ??= starter ? STARTER[starter] : "";
   const step2 = template !== undefined;
   const widget = siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="new" />;
@@ -106,6 +108,7 @@ export const NewDoorPage = ({ owner, siteKey, post, handle = "", name = "", temp
       </p>
       {!step2 && <p class="mt-4 text-sm"><a href="/example">See a sample door and knock first</a></p>}
       {ref && !step2 && <p class={`mt-6 ${notice}`}>{REF_LINE[ref]}{starter ? " We started your post below. Replace the parts in [brackets]." : ""}</p>}
+      {copied && <p class={`mt-6 ${notice}`}>Copied the setup from a public door. Replace the parts in [brackets] with your own post. Your Yes reply and booking link are yours to set in Settings.</p>}
       {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
       <form method="post" action="/new" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
         {ref && <input type="hidden" name="ref" value={ref} />}
@@ -346,6 +349,29 @@ export const FaqPage = () => (
         </div>
       ))}
     </dl>
+  </Shell>
+);
+
+export const GalleryPage = ({ rows }: { rows: GalleryRow[] }) => (
+  <Shell title="Template gallery | Doorbell" description="Copy the setup of a public door that answers nearly everyone. Questions, window and Yes action only, never the knocks.">
+    <h1 class="text-3xl">Template gallery</h1>
+    <p class="mt-3 text-lg text-muted-foreground">Setups from public doors that answer at least 80% of knocks. You copy the questions and the window, never the knocks.</p>
+    {rows.length === 0 ? (
+      <p class={`mt-10 ${notice}`}>No doors are listed yet. <a href="/new">Make a door</a> and list it from Settings once it qualifies.</p>
+    ) : (
+      <ul class="mt-10 grid gap-4 sm:grid-cols-2">
+        {rows.map((r) => (
+          <li class={`flex flex-col p-5 ${card}`}>
+            <p class="text-sm text-muted-foreground tabular">{r.template[0]!.toUpperCase() + r.template.slice(1)} · {r.pct}% answered · {r.window} day window</p>
+            <ul class="mt-3 list-disc space-y-1 pl-5 text-sm">
+              {r.fields.map((f) => <li>{f}</li>)}
+            </ul>
+            <p class="mt-3 text-sm text-muted-foreground">{r.yes === "booking" ? "Yes sends a booking link. Add yours in Settings." : "Yes sends a short reply."}</p>
+            <a href={`/new?from=${r.doorId}`} class={`mt-4 ${btn({ variant: "outline", size: "default" })}`}>Use this setup</a>
+          </li>
+        ))}
+      </ul>
+    )}
   </Shell>
 );
 

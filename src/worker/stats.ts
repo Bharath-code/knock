@@ -58,19 +58,19 @@ export const badgeFor = async (db: D1Database, handle: string, slug: string): Pr
   return r && r.rate !== null && r.rate >= BADGE_MIN_RATE ? { pct: Math.round(r.rate * 100), days: r.days } : null;
 };
 
-export type BadgeRow = { doorId: string; slug: string; handle: string | null; optin: boolean; pct: number | null; days: number; shown: boolean };
+export type BadgeRow = { doorId: string; slug: string; handle: string | null; optin: boolean; listed: boolean; pct: number | null; days: number; shown: boolean };
 
 export const badgeRows = async (db: D1Database, o: OwnerUser): Promise<BadgeRow[]> => {
   const { results } = await db
     .prepare(
-      `SELECT d.id, d.slug, p.handle, d.badge_optin AS optin, s.answer_rate_90d AS rate, d.window_days AS days
+      `SELECT d.id, d.slug, p.handle, d.badge_optin AS optin, d.listed_optin AS listed, s.answer_rate_90d AS rate, d.window_days AS days
        FROM doors d JOIN users u ON u.id = d.owner_user_id JOIN people p ON p.id = u.person_id LEFT JOIN door_stats s ON s.door_id = d.id
        WHERE d.owner_user_id = ?1 AND d.status = 'open' ORDER BY d.created_at`,
     )
     .bind(o.userId)
-    .all<{ id: string; slug: string; handle: string | null; optin: number; rate: number | null; days: number }>();
+    .all<{ id: string; slug: string; handle: string | null; optin: number; listed: number; rate: number | null; days: number }>();
   return results.map((r) => ({
-    doorId: r.id, slug: r.slug, handle: r.handle, optin: r.optin === 1, pct: r.rate === null ? null : Math.round(r.rate * 100), days: r.days,
+    doorId: r.id, slug: r.slug, handle: r.handle, optin: r.optin === 1, listed: r.listed === 1, pct: r.rate === null ? null : Math.round(r.rate * 100), days: r.days,
     shown: r.optin === 1 && r.rate !== null && r.rate >= BADGE_MIN_RATE,
   }));
 };
