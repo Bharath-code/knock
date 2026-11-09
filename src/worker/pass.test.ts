@@ -52,10 +52,9 @@ test("offer validates the target", async () => {
   const r = (target: string, id = "k1") => offerPass(db, riya, id, target, "", now);
   expect(await r("nonsense")).toMatchObject({ ok: false, reason: "target" });
   expect(await r("/d/nobody/none")).toMatchObject({ ok: false, reason: "target" });
-  expect(await r("d")).toMatchObject({ ok: false, reason: "same" });
-  expect(await r("https://doorbell.example/d/riya")).toMatchObject({ ok: false, reason: "same" });
-  expect(await r("https://doorbell.example/d/arjun/old")).toMatchObject({ ok: false, reason: "closed" });
-  expect(await r("https://doorbell.example/d/arjun", "k2")).toMatchObject({ ok: false, reason: "knocked" });
+  expect(await r("d")).toMatchObject({ ok: false, reason: "target" });
+  expect(await r("https://doorbell.example/d/riya")).toMatchObject({ ok: false, reason: "target" });
+  expect(await r("https://doorbell.example/d/arjun/old")).toMatchObject({ ok: false, reason: "target" });
   expect(await offerPass({ ...db } as D1Database, arjun, "k1", "d", "", now)).toMatchObject({ ok: false, reason: "open" });
   const ok = await r("f", "k1");
   expect(ok).toMatchObject({ ok: true, by: "Riya", toName: "Riya" });
@@ -145,4 +144,17 @@ test("passes per week are counted by status, and passing keeps the answer rate",
   }
   await refreshDoorStats(db, now + 1000);
   expect((sqlite.query("SELECT answer_rate_90d r FROM door_stats WHERE door_id = 'd'").get() as { r: number }).r).toBeCloseTo(8 / 10);
+});
+
+test("offering to a door the sender already knocked on looks like any offer; confirm refuses it for the sender only", async () => {
+  const { db, sqlite, now, env, calls, count } = await setup();
+  const offer = await offerPass(db, riya, "k2", "https://doorbell.example/d/arjun", "", now);
+  expect(offer).toMatchObject({ ok: true, by: "Riya", toName: "Arjun" });
+  if (!offer.ok) throw new Error(offer.reason);
+  expect(Object.keys(offer).sort()).toEqual(Object.keys((await offerPass(db, riya, "k1", "https://doorbell.example/d/arjun", "", now)) as object).sort());
+  const before = count("SELECT COUNT(*) n FROM knocks");
+  expect(await confirmPass(env, offer.token, "ip", now)).toEqual({ ok: false, reason: "knocked" });
+  expect(count("SELECT COUNT(*) n FROM knocks")).toBe(before);
+  expect(calls()).toBe(0);
+  expect(sqlite.query("SELECT status FROM passes WHERE from_knock_id = 'k2'").get()).toEqual({ status: "pending" });
 });

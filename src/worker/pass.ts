@@ -11,13 +11,10 @@ export const PASS_TTL = 7 * DAY;
 export const PASSES_PER_HOUR = 20;
 
 export type PassJob = { type: "pass"; to: string; by: string; toName: string; note: string | null; token: string; knockId: string; at: number };
-export type OfferFail = "open" | "target" | "closed" | "same" | "knocked" | "limited";
+export type OfferFail = "open" | "target" | "limited";
 export const PASS_REFUSAL: Record<OfferFail, string> = {
   open: "That knock is no longer open.",
-  target: "Pick one of your doors or paste a link like /d/handle/slug.",
-  closed: "That door is closed.",
-  same: "That is the door the knock came to.",
-  knocked: "The sender already knocked on that door.",
+  target: "That door can't take this pass. Pick one of your doors or paste a different door link.",
   limited: "Too many passes this hour. Try again later.",
 };
 export type Offer = ({ ok: true } & PassJob) | { ok: false; reason: OfferFail };
@@ -48,17 +45,14 @@ const pending = `k.id = ?1 AND k.status IN ('new', 'seen') AND k.expires_at > ?2
 
 // Nothing is sent to the target door here: this only records the offer and emails the sender a one-tap confirm link.
 export const offerPass = async (db: D1Database, o: OwnerUser, knockId: string, target: string, rawNote: string, now = Date.now()): Promise<Offer> => {
+  if (!(await withinLimit(db, `pass:${o.userId}`, now, PASSES_PER_HOUR))) return { ok: false, reason: "limited" };
   const k = await db
     .prepare(`SELECT k.door_id AS door, k.person_id AS person, p.email FROM knocks k JOIN people p ON p.id = k.person_id WHERE ${pending}`)
     .bind(knockId, now, o.userId)
     .first<{ door: string; person: string; email: string }>();
   if (!k) return { ok: false, reason: "open" };
   const to = await resolve(db, o, target);
-  if (!to) return { ok: false, reason: "target" };
-  if (to.status !== "open") return { ok: false, reason: "closed" };
-  if (to.id === k.door) return { ok: false, reason: "same" };
-  if (await db.prepare("SELECT 1 AS ok FROM knocks WHERE door_id = ?1 AND person_id = ?2").bind(to.id, k.person).first()) return { ok: false, reason: "knocked" };
-  if (!(await withinLimit(db, `pass:${o.userId}`, now, PASSES_PER_HOUR))) return { ok: false, reason: "limited" };
+  if (!to || to.status !== "open" || to.id === k.door) return { ok: false, reason: "target" };
   const by = (await db.prepare(`SELECT ${name("p")} AS n FROM users u JOIN people p ON p.id = u.person_id WHERE u.id = ?1`).bind(o.userId).first<{ n: string }>())?.n ?? "A receiver";
   const note = stripLinks(rawNote).slice(0, NOTE_MAX) || null;
   const token = randomHex(16);
