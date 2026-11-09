@@ -5,6 +5,7 @@ import { StrictMode, useCallback, useEffect, useRef, useState, type MouseEvent, 
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { closureMessage } from "../shared/closure";
+import { splitAround } from "../shared/chips";
 import { CLOSE_MESSAGE, keyAction, minutesTaken, MOMENT_MIN, NOTE_MAX, REASONS, POLL_MS, safeProof, sortCards, swipeAnswer, UNDO_MS, type InboxAnswer, type InboxCard, type Reason } from "../shared/inbox";
 import type { Pool } from "../shared/codes";
 import { card as cardBox } from "../shared/ui";
@@ -42,6 +43,11 @@ const Fit = ({ fit }: { fit: number | null }) => (
   </span>
 );
 
+const Marked = ({ text, quote }: { text: string; quote: string | null }) => {
+  const [a, b, z] = splitAround(text, quote);
+  return b ? <>{a}<mark className="rounded-sm bg-brass-soft px-0.5 text-foreground">{b}</mark>{z}</> : <>{text}</>;
+};
+
 const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => void }) => {
   const start = useRef<[number, number] | null>(null);
   const [drag, setDrag] = useState<[number, number]>([0, 0]);
@@ -53,11 +59,13 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
     if (a) onAnswer(a);
   };
   const proof = safeProof(c.proof);
+  const [pick, setPick] = useState<number | null>(null);
+  const quote = pick === null ? null : (c.chips[pick]?.quote ?? null);
   return (
     <article
       className={cn(cardBox, "animate-rise touch-pan-y p-5 shadow-e-2 select-none sm:p-6", !start.current && "transition-transform duration-(--d-base) ease-out")}
       style={{ transform: `translate(${drag[0]}px, ${Math.min(drag[1], 0)}px) rotate(${drag[0] / 24}deg)` }}
-      onPointerDown={(e) => { if ((e.target as Element).closest("a")) return; start.current = [e.clientX, e.clientY]; e.currentTarget.setPointerCapture(e.pointerId); }}
+      onPointerDown={(e) => { if ((e.target as Element).closest("a, button")) return; start.current = [e.clientX, e.clientY]; e.currentTarget.setPointerCapture(e.pointerId); }}
       onPointerMove={(e) => start.current && setDrag([e.clientX - start.current[0], e.clientY - start.current[1]])}
       onPointerUp={end}
       onPointerCancel={() => { start.current = null; setDrag([0, 0]); }}
@@ -66,17 +74,33 @@ const Card = ({ c, onAnswer }: { c: InboxCard; onAnswer: (a: InboxAnswer) => voi
         <p className="truncate font-mono text-xs text-muted-foreground">{c.door}</p>
         <p className="flex items-center gap-3 text-xs text-muted-foreground"><Fit fit={c.fit} /><span className="tabular">{due(c.expiresAt)}</span></p>
       </header>
-      <p className="mt-4 text-lg whitespace-pre-line">{c.message}</p>
+      {c.chips.length > 0 && (
+        <ul className="mt-4 flex flex-wrap gap-2" aria-label="Why this fits">
+          {c.chips.map((x, n) => (
+            <li key={x.label}>
+              <button
+                type="button"
+                aria-pressed={pick === n}
+                onClick={() => setPick(pick === n ? null : n)}
+                className="inline-flex min-h-11 items-center rounded-full border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-brass-soft aria-pressed:text-foreground sm:min-h-8"
+              >
+                {x.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-4 text-lg whitespace-pre-line"><Marked text={c.message} quote={quote} /></p>
       {c.answers.length > 0 && (
         <dl className="mt-5 space-y-3 border-t pt-4 text-sm">
           {c.answers.map((x) => (
-            <div key={x.q}><dt className="text-muted-foreground">{x.q}</dt><dd className="mt-0.5 break-words">{x.a}</dd></div>
+            <div key={x.q}><dt className="text-muted-foreground">{x.q}</dt><dd className="mt-0.5 break-words"><Marked text={x.a} quote={quote} /></dd></div>
           ))}
         </dl>
       )}
       {proof && (
         <a className="mt-4 inline-flex max-w-full items-center gap-1.5 text-sm" href={proof} target="_blank" rel="noreferrer noopener">
-          <span className="truncate">{proof.replace(/^https?:\/\//, "")}</span><ExternalLink className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate"><Marked text={proof.replace(/^https?:\/\//, "")} quote={quote?.replace(/^https?:\/\//, "") ?? null} /></span><ExternalLink className="size-3.5 shrink-0" aria-hidden />
         </a>
       )}
       {(c.spam || c.rewrote) && (
