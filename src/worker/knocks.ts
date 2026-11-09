@@ -1,4 +1,5 @@
-import { randomHex, sha256 } from "./doors";
+import { normalizeEmail } from "../shared/knock";
+import { idHash, randomHex, sha256 } from "./doors";
 
 export type KnockWrite = {
   orgId: string;
@@ -18,19 +19,21 @@ const DAY_MS = 86_400_000;
 export const writeKnock = async (db: D1Database, k: KnockWrite, now = Date.now()) => {
   const token = randomHex(16);
   const id = crypto.randomUUID();
-  const emailHash = await sha256(k.key);
-  const person = "(SELECT id FROM people WHERE email_hash = ?)";
+  // A person is the exact address; k.key (+tag stripped) only feeds the per-door duplicate check in the Door object.
+  const email = normalizeEmail(k.email);
+  const emailHash = await idHash(email);
+  const person = "(SELECT id FROM people WHERE email = ?)";
   await db.batch([
     db
       .prepare("INSERT OR IGNORE INTO people (id, email, email_hash, created_at) VALUES (?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), k.email, emailHash, now),
+      .bind(crypto.randomUUID(), email, emailHash, now),
     db
       .prepare(
         `INSERT INTO knocks (id, org_id, door_id, person_id, answers_json, proof_url, consent_at, source, token_hash, created_at, expires_at)
          VALUES (?, ?, ?, ${person}, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        id, k.orgId, k.doorId, emailHash,
+        id, k.orgId, k.doorId, email,
         JSON.stringify({ message: k.message, answers: k.answers }), k.proof || null, now, k.source,
         await sha256(token), now, now + k.windowDays * DAY_MS,
       ),
@@ -44,7 +47,7 @@ export const writeKnock = async (db: D1Database, k: KnockWrite, now = Date.now()
         `INSERT INTO person_stats (person_id, knocks_sent, distinct_receivers, updated_at) VALUES (${person}, 1, 1, ?)
          ON CONFLICT (person_id) DO UPDATE SET knocks_sent = knocks_sent + 1, distinct_receivers = distinct_receivers + 1, updated_at = excluded.updated_at`,
       )
-      .bind(emailHash, now),
+      .bind(email, now),
   ]);
   return { token, id };
 };
