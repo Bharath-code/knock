@@ -1,5 +1,5 @@
 /** @jsxImportSource hono/jsx */
-import { Shell } from "./door-pages";
+import { Mark, Shell } from "./door-pages";
 
 import { alert, button as btn, card, input as inputBase, label, notice } from "../shared/ui";
 
@@ -17,25 +17,29 @@ export const SigninPage = ({ siteKey, sent, error, email = "" }: { siteKey?: str
       </>
     }
   >
-    <h1 class="text-3xl">Sign in</h1>
-    {sent ? (
-      <p role="status" class={`mt-6 ${notice}`}>
-        If that address can sign in, a link is on its way. It works once and expires in 15 minutes.
-      </p>
-    ) : (
-      <>
-        <p class="mt-3 text-lg text-muted-foreground">We email you a link. No password.</p>
-        {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
-        <form method="post" action="/signin" class={`mt-8 space-y-6 p-5 sm:p-8 ${card}`}>
-          <div>
-            <label for="email" class={label}>Email</label>
-            <input id="email" name="email" type="email" value={email} required maxlength={254} autocomplete="email" class={input} />
-          </div>
-          {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="signin" />}
-          <button class={button}>Email me a link</button>
-        </form>
-      </>
-    )}
+    <div class={`mx-auto max-w-sm p-6 sm:p-8 ${card}`}>
+      <span class="grid size-11 place-content-center rounded-xl bg-button-primary"><Mark class="text-primary-foreground" /></span>
+      <h1 class="mt-5 text-2xl">Sign in</h1>
+      {sent ? (
+        <p role="status" class={`mt-6 ${notice}`}>
+          If that address can sign in, a link is on its way. It works once and expires in 15 minutes.
+        </p>
+      ) : (
+        <>
+          <p class="mt-1.5 text-muted-foreground">We email you a link. No password.</p>
+          {error && <p role="alert" class={`mt-6 ${alert}`}>{error}</p>}
+          <form method="post" action="/signin" class="mt-6 space-y-5">
+            <div>
+              <label for="email" class={label}>Email</label>
+              <input id="email" name="email" type="email" value={email} required maxlength={254} autocomplete="email" class={input} />
+            </div>
+            {siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-action="signin" />}
+            <button class={`${btn({ variant: "default", size: "lg" })} w-full`}>Email me a link</button>
+          </form>
+        </>
+      )}
+    </div>
+    <p class="mt-6 text-center text-sm text-muted-foreground">No door yet? <a href="/new">Make one in a minute</a></p>
   </Shell>
 );
 

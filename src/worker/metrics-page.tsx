@@ -1,17 +1,18 @@
 /** @jsxImportSource hono/jsx */
-import { alert, card, notice } from "../shared/ui";
+import { alert, dot, notice, pill, raised, type Tone } from "../shared/ui";
 import { Shell } from "./door-pages";
 import { TARGETS, verdict, type D1Metrics, type EventCounts, type Verdict } from "./metrics";
 
 const fmt = (v: number | null, f: "n" | "pct" | "dec") =>
   v === null ? "–" : f === "pct" ? `${Math.round(v * 100)}%` : f === "dec" ? v.toFixed(1) : String(Math.round(v));
 
-const BADGE: Record<Verdict, { text: string; cls: string }> = {
-  met: { text: "On target", cls: "bg-yes/10 text-yes" },
-  below: { text: "Below target", cls: "bg-brass-soft text-brass-ink" },
-  kill: { text: "Kill signal", cls: "bg-destructive/10 text-destructive" },
-  none: { text: "No data yet", cls: "bg-muted text-muted-foreground" },
+const BADGE: Record<Verdict, { text: string; tone: Tone }> = {
+  met: { text: "On target", tone: "yes" },
+  below: { text: "Below target", tone: "maybe" },
+  kill: { text: "Kill signal", tone: "no" },
+  none: { text: "No data yet", tone: "neutral" },
 };
+const Verdict = ({ v }: { v: Verdict }) => <span class={pill(BADGE[v].tone)}><span class={dot(BADGE[v].tone)} />{BADGE[v].text}</span>;
 
 const FUNNEL = [
   ["door_view", "Door views"],
@@ -37,18 +38,16 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
       <h1 class="text-3xl">Metrics</h1>
       <p class="mt-3 text-muted-foreground">Private. Last 14 days unless noted.</p>
 
-      <section class={`mt-8 p-6 ${card}`} aria-labelledby="ns">
+      <section class={`mt-8 p-6 ${raised}`} aria-labelledby="ns">
         <h2 id="ns" class="text-sm font-medium text-muted-foreground">North Star · answered knocks, last 7 days</h2>
         <p class="mt-2 font-display text-3xl font-semibold tabular-nums">{d1.northStar}</p>
         <p class="mt-1 text-sm text-muted-foreground">Yes, Not now or No within the window. Auto-closed knocks don't count.</p>
       </section>
 
-      <section class={`mt-10 p-5 ${card}`} aria-labelledby="fd">
+      <section class={`mt-10 p-5 ${raised}`} aria-labelledby="fd">
         <div class="flex items-start justify-between gap-3">
           <h2 id="fd" class="text-sm font-medium text-muted-foreground">First door speed · last 5 new receivers</h2>
-          <span class={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE[d1.firstDoor.n < 5 ? "none" : d1.firstDoor.fast >= 4 ? "met" : "below"].cls}`}>
-            {BADGE[d1.firstDoor.n < 5 ? "none" : d1.firstDoor.fast >= 4 ? "met" : "below"].text}
-          </span>
+          <Verdict v={d1.firstDoor.n < 5 ? "none" : d1.firstDoor.fast >= 4 ? "met" : "below"} />
         </div>
         <p class="mt-2 font-display text-2xl font-semibold tabular-nums">{d1.firstDoor.n ? `${d1.firstDoor.fast} of ${d1.firstDoor.n} under 60 s` : "–"}</p>
         <p class="mt-1 text-sm text-muted-foreground">
@@ -56,7 +55,7 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
         </p>
       </section>
 
-      <section class={`mt-10 p-6 ${card}`} aria-labelledby="pw">
+      <section class={`mt-10 p-6 ${raised}`} aria-labelledby="pw">
         <h2 id="pw" class="text-sm font-medium text-muted-foreground">Passes per week · last 7 days</h2>
         <p class="mt-2 font-display text-3xl font-semibold tabular-nums">{d1.passes.pending + d1.passes.accepted + d1.passes.declined}</p>
         <p class="mt-1 text-sm text-muted-foreground">{d1.passes.accepted} confirmed by the sender · {d1.passes.pending} waiting · {d1.passes.declined} declined.</p>
@@ -67,12 +66,12 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
         <ul class="mt-4 grid gap-4 sm:grid-cols-2">
           {TARGETS.map((t) => {
             const v = d1[t.key];
-            const b = BADGE[verdict(v, t.goal, "kill" in t ? t.kill : undefined)];
+            const b = verdict(v, t.goal, "kill" in t ? t.kill : undefined);
             return (
-              <li class={`flex flex-col gap-2 p-5 ${card}`}>
+              <li class={`flex flex-col gap-2 p-5 ${raised}`}>
                 <div class="flex items-start justify-between gap-3">
                   <h3 class="text-sm font-medium text-muted-foreground">{t.label}</h3>
-                  <span class={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${b.cls}`}>{b.text}</span>
+                  <Verdict v={b} />
                 </div>
                 <p class="font-display text-2xl font-semibold tabular-nums">{fmt(v, t.fmt)}</p>
                 <p class="text-sm text-muted-foreground">
@@ -85,7 +84,7 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
         </ul>
       </section>
 
-      <section class={`mt-10 p-6 ${card}`} aria-labelledby="fs">
+      <section class={`mt-10 p-6 ${raised}`} aria-labelledby="fs">
         <h2 id="fs" class="text-sm font-medium text-muted-foreground">Doors made by former senders · all time</h2>
         <p class="mt-2 font-display text-3xl font-semibold tabular-nums">{fmt(d1.fromSenderShare, "pct")}</p>
         <p class="mt-1 text-sm text-muted-foreground">Of {d1.doors} doors. Goal 20% by day 60. Under 20% then means the network isn't forming.</p>
@@ -99,17 +98,22 @@ export const MetricsPage = ({ d1, events: raw }: { d1: D1Metrics; events: EventC
           <p class={`mt-4 ${notice}`}>Event counts are unavailable here. They load on Cloudflare through the Analytics SQL binding, not in local dev.</p>
         ) : (
           <>
-            <dl class={`mt-4 divide-y ${card}`}>
-              {FUNNEL.map(([key, name]) => (
-                <div class="flex items-baseline justify-between gap-4 px-5 py-3">
-                  <dt>{name}</dt>
-                  <dd class="font-mono tabular-nums">{sum(key)}</dd>
-                </div>
-              ))}
+            <dl class={`mt-4 space-y-2 p-4 sm:p-5 ${raised}`}>
+              {FUNNEL.map(([key, name]) => {
+                const top = Math.max(1, sum(FUNNEL[0][0]));
+                const share = Math.min(100, (sum(key) / top) * 100);
+                return (
+                  <div class="relative isolate flex items-baseline justify-between gap-4 overflow-hidden rounded-lg px-3 py-2">
+                    <span aria-hidden="true" class="absolute inset-y-0 left-0 -z-10 rounded-lg bg-brass-soft" style={`width:${share}%`} />
+                    <dt class="text-sm">{name}</dt>
+                    <dd class="flex items-baseline gap-3 font-mono text-sm tabular-nums">{sum(key)}<span class="w-10 text-right text-xs text-muted-foreground">{Math.round(share)}%</span></dd>
+                  </div>
+                );
+              })}
             </dl>
             <h3 class="mt-8 text-base font-semibold">Link reach by source</h3>
             <p class="mt-1 text-sm text-muted-foreground">Reply links carry ?s=reply, bio links ?s=bio. Link-preview bots are left out.</p>
-            <div class={`mt-4 overflow-x-auto ${card}`}>
+            <div class={`mt-4 overflow-x-auto ${raised}`}>
               <table class="w-full text-sm">
                 <thead class="text-left text-muted-foreground">
                   <tr><th class="px-5 py-3 font-medium">Source</th><th class="px-5 py-3 text-right font-medium">Views</th><th class="px-5 py-3 text-right font-medium">Knocks</th><th class="px-5 py-3 text-right font-medium">View → knock</th></tr>

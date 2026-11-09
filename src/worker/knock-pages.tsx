@@ -2,7 +2,7 @@
 import { ANSWER_LABEL } from "../shared/knock";
 import type { DoorView } from "./doors";
 import type { Status } from "./knocks";
-import { alert, button, card, hint, input as inputBase, label } from "../shared/ui";
+import { alert, button, card, dot, hint, input as inputBase, label, pill, type Tone } from "../shared/ui";
 
 export type KnockForm = { error?: string; email?: string; message?: string; answers?: string[]; proof?: string };
 
@@ -62,25 +62,41 @@ export const KnockFormView = ({ door, siteKey, source, form = {} }: { door: Door
 
 const when = (ms: number) => new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 
-const Step = ({ done, label, at, hint }: { done: boolean; label: string; at?: number | null; hint?: string }) => (
-  <li class="flex gap-4 py-4">
-    <span aria-hidden="true" class={`mt-1.5 size-3 shrink-0 rounded-full ${done ? "bg-yes ring-4 ring-yes-soft" : "border-2 border-line-strong"}`} />
-    <span>
-      <strong class={`font-medium ${done ? "" : "text-muted-foreground"}`}>{label}</strong>
-      {done && at ? <time class="block font-mono text-xs text-muted-foreground" datetime={new Date(at).toISOString()}>{when(at)}</time> : <span class="block text-sm text-muted-foreground">{hint}</span>}
+type StepState = "done" | "now" | "todo";
+const Step = ({ state, tone = "yes", label, at, hint }: { state: StepState; tone?: Tone; label: string; at?: number | null; hint?: string }) => (
+  <li class="relative flex gap-4 pb-7 last:pb-0 before:absolute before:top-8 before:bottom-1 before:left-3 before:w-px before:bg-border last:before:hidden">
+    <span aria-hidden="true" class={`relative grid size-6 shrink-0 place-content-center rounded-full ${state === "done" ? `${TONE_FILL[tone]} text-white dark:text-background` : state === "now" ? "bg-maybe-soft ring-1 ring-maybe/40" : "border-2 border-input bg-card"}`}>
+      {state === "done" && <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+      {state === "now" && <span class="size-2 rounded-full bg-maybe motion-safe:animate-pulse" />}
+    </span>
+    <span class="min-w-0 pt-0.5">
+      <span class="flex flex-wrap items-center gap-2">
+        <strong class={`font-medium ${state === "todo" ? "text-muted-foreground" : ""}`}>{label}</strong>
+        {state === "now" && <span class={pill("maybe")}>Waiting</span>}
+      </span>
+      {state === "done" && at ? <time class="block font-mono text-xs text-muted-foreground" datetime={new Date(at).toISOString()}>{when(at)}</time> : <span class="block text-sm text-muted-foreground">{hint}</span>}
     </span>
   </li>
 );
+const TONE_FILL: Record<Tone, string> = { yes: "bg-yes", later: "bg-later", no: "bg-destructive", maybe: "bg-maybe", brand: "bg-primary", neutral: "bg-muted-foreground" };
+const ANSWER_TONE: Record<string, Tone> = { yes: "yes", later: "later", no: "no", expired: "neutral" };
 
-export const StatusBody = ({ s, link }: { s: Status; link: string }) => (
+export const StatusBody = ({ s, link }: { s: Status; link: string }) => {
+  const closed = s.answeredAt !== null || s.answer === "expired";
+  const seen = s.seenAt !== null;
+  const tone: Tone = s.answer ? (ANSWER_TONE[s.answer] ?? "neutral") : seen ? "maybe" : "neutral";
+  const headline = s.answer ? (ANSWER_LABEL[s.answer] ?? s.answer) : seen ? "Seen, answer on the way" : "Delivered";
+  return (
   <>
-    <h1 class="text-3xl">Your knock</h1>
+    <span class={pill(tone)}><span class={dot(tone)} />{headline}</span>
+    <h1 class="mt-4 text-3xl">Your knock</h1>
     <p class="mt-3 text-lg text-muted-foreground">To {s.who}: {s.title}</p>
-    <ol class={`mt-8 divide-y divide-line px-5 sm:px-6 ${card}`}>
-      <Step done label="Delivered" at={s.createdAt} />
-      <Step done={s.seenAt !== null} label="Seen" at={s.seenAt} hint="Not seen yet" />
+    <ol class={`mt-8 p-5 sm:p-6 ${card}`}>
+      <Step state="done" label="Delivered" at={s.createdAt} />
+      <Step state={seen ? "done" : "now"} label="Seen" at={s.seenAt} hint="Not seen yet" />
       <Step
-        done={s.answeredAt !== null || s.answer === "expired"}
+        state={closed ? "done" : seen ? "now" : "todo"}
+        tone={s.answer ? (ANSWER_TONE[s.answer] ?? "neutral") : "yes"}
         label={s.answer === "expired" ? ANSWER_LABEL.expired! : s.answer ? `Answer: ${ANSWER_LABEL[s.answer] ?? s.answer}` : "Answer"}
         at={s.answeredAt ?? (s.answer === "expired" ? s.expiresAt : null)}
         hint={`You will hear back by ${when(s.expiresAt)}`}
@@ -88,4 +104,5 @@ export const StatusBody = ({ s, link }: { s: Status; link: string }) => (
     </ol>
     <p class="mt-4 text-sm text-muted-foreground">Keep this link private: <span class="break-all font-mono">{link}</span></p>
   </>
-);
+  );
+};

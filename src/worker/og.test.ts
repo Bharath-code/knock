@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 // og.ts imports wasm and a vite ?inline font, so stub both for bun
 import { mock } from "bun:test";
 mock.module("@resvg/resvg-wasm/index_bg.wasm", () => ({ default: {} }));
-mock.module("@fontsource/figtree/files/figtree-latin-800-normal.woff?inline", () => ({ default: "" }));
+mock.module("@fontsource/schibsted-grotesk/files/schibsted-grotesk-latin-800-normal.woff?inline", () => ({ default: "" }));
 mock.module("@resvg/resvg-wasm", () => ({ initWasm: async () => {}, Resvg: class {} }));
 const { answeredSvg, scoreSvg } = await import("./og");
 

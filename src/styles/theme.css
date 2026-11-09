@@ -1,6 +1,5 @@
-@import "@fontsource-variable/bricolage-grotesque";
-@import "@fontsource-variable/figtree";
-@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/newsreader";
+@import "@fontsource-variable/schibsted-grotesk";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -15,17 +14,21 @@
   }
 }
 
-/* shadcn tokens. Warm neutral greys (hue ~70, near-zero chroma), brass as the one brand colour. */
+/* shadcn tokens. Warm neutral greys (hue ~70, near-zero chroma), brass as the one brand colour.
+   Elevation, gradient button and status-pill recipes adapted from BoardUI (MIT, github.com/BoardUI/boardui). */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.985 0.002 75);
+  --radius: 0.625rem;
+  --background: oklch(0.972 0.003 75);
   --foreground: oklch(0.2 0.006 60);
   --card: oklch(1 0 0);
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.54 0.12 65);
+  --primary: oklch(0.58 0.165 52);
   --primary-foreground: oklch(0.99 0.002 75);
+  --primary-top: oklch(0.6 0.165 54);
+  --primary-bottom: oklch(0.515 0.16 46);
+  --primary-edge: oklch(0.47 0.14 46);
   --secondary: oklch(0.955 0.003 75);
   --secondary-foreground: var(--foreground);
   --muted: oklch(0.955 0.003 75);
@@ -33,16 +36,20 @@
   --accent: oklch(0.945 0.004 75);
   --accent-foreground: var(--foreground);
   --destructive: oklch(0.53 0.19 27);
-  --border: oklch(0.915 0.004 75);
-  --input: oklch(0.885 0.005 75);
-  --ring: oklch(0.6 0.12 65);
+  --border: oklch(0.91 0.004 75);
+  --input: oklch(0.87 0.005 75);
+  --ring: oklch(0.66 0.16 56);
 
-  --brand-ink: oklch(0.46 0.1 65);
-  --brand-soft: oklch(0.96 0.03 82);
-  --yes: oklch(0.52 0.12 160);
-  --later: oklch(0.54 0.09 255);
-  --e-1: 0 1px 2px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
-  --e-2: 0 10px 30px -8px oklch(0 0 0 / 0.14), 0 2px 6px oklch(0 0 0 / 0.05);
+  --brand-ink: oklch(0.5 0.14 50);
+  --brand-soft: oklch(0.955 0.04 75);
+  --yes: oklch(0.55 0.14 152);
+  --later: oklch(0.53 0.17 295);
+  --maybe: oklch(0.6 0.13 80);
+  --tint: 13%;
+  --e-1: 0 1px 1px 0 oklch(0 0 0 / 0.05);
+  --e-2: 0 1px 0 0 oklch(0 0 0 / 0.02), 0 1px 12px 0 oklch(0 0 0 / 0.06), 0 0 1px 0 oklch(0 0 0 / 0.32);
+  --e-3: 0 0 6px 0 oklch(0 0 0 / 0.06), 0 0 48px 0 oklch(0 0 0 / 0.12), 0 0 1px 0 oklch(0 0 0 / 0.32), 0 1px 12px 0 oklch(0 0 0 / 0.06);
+  --highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.25);
   --d-fast: 120ms;
   --d-base: 220ms;
   color-scheme: light;
@@ -50,12 +57,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: oklch(0.155 0.003 60);
-    --foreground: oklch(0.955 0.003 75);
+    --background: oklch(0.145 0.003 60);
+    --foreground: oklch(0.965 0.003 75);
     --card: oklch(0.195 0.004 60);
     --popover: oklch(0.21 0.004 60);
-    --primary: oklch(0.8 0.13 75);
-    --primary-foreground: oklch(0.2 0.02 60);
+    --primary: oklch(0.78 0.15 68);
+    --primary-foreground: oklch(0.22 0.03 55);
+    --primary-top: oklch(0.83 0.14 75);
+    --primary-bottom: oklch(0.74 0.155 62);
+    --primary-edge: oklch(0.66 0.15 58);
     --secondary: oklch(0.25 0.004 60);
     --muted: oklch(0.24 0.004 60);
     --muted-foreground: oklch(0.71 0.007 70);
@@ -63,24 +73,31 @@
     --destructive: oklch(0.68 0.19 25);
     --border: oklch(1 0 0 / 0.09);
     --input: oklch(1 0 0 / 0.14);
-    --ring: oklch(0.8 0.13 75);
-    --brand-ink: oklch(0.85 0.1 80);
-    --brand-soft: oklch(0.27 0.04 75);
-    --yes: oklch(0.74 0.14 160);
-    --later: oklch(0.74 0.09 255);
-    --e-1: 0 1px 2px oklch(0 0 0 / 0.4);
-    --e-2: 0 12px 32px -8px oklch(0 0 0 / 0.6), 0 2px 6px oklch(0 0 0 / 0.3);
+    --ring: oklch(0.78 0.15 68);
+    --brand-ink: oklch(0.85 0.12 75);
+    --brand-soft: oklch(0.28 0.05 65);
+    --yes: oklch(0.78 0.16 152);
+    --later: oklch(0.76 0.13 295);
+    --maybe: oklch(0.84 0.13 85);
+    --tint: 18%;
+    --e-1: 0 1px 1px 0 oklch(0 0 0 / 0.4), inset 0 1px 0 0 oklch(1 0 0 / 0.04);
+    --e-2: 0 0 0 1px oklch(1 0 0 / 0.06), 0 1px 12px 0 oklch(0 0 0 / 0.5), inset 0 1px 0 0 oklch(1 0 0 / 0.05);
+    --e-3: 0 0 0 1px oklch(1 0 0 / 0.08), 0 0 48px 0 oklch(0 0 0 / 0.6), 0 1px 12px 0 oklch(0 0 0 / 0.4), inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+    --highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.35);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --background: oklch(0.155 0.003 60);
-  --foreground: oklch(0.955 0.003 75);
+  --background: oklch(0.145 0.003 60);
+  --foreground: oklch(0.965 0.003 75);
   --card: oklch(0.195 0.004 60);
   --popover: oklch(0.21 0.004 60);
-  --primary: oklch(0.8 0.13 75);
-  --primary-foreground: oklch(0.2 0.02 60);
+  --primary: oklch(0.78 0.15 68);
+  --primary-foreground: oklch(0.22 0.03 55);
+  --primary-top: oklch(0.83 0.14 75);
+  --primary-bottom: oklch(0.74 0.155 62);
+  --primary-edge: oklch(0.66 0.15 58);
   --secondary: oklch(0.25 0.004 60);
   --muted: oklch(0.24 0.004 60);
   --muted-foreground: oklch(0.71 0.007 70);
@@ -88,13 +105,17 @@
   --destructive: oklch(0.68 0.19 25);
   --border: oklch(1 0 0 / 0.09);
   --input: oklch(1 0 0 / 0.14);
-  --ring: oklch(0.8 0.13 75);
-  --brand-ink: oklch(0.85 0.1 80);
-  --brand-soft: oklch(0.27 0.04 75);
-  --yes: oklch(0.74 0.14 160);
-  --later: oklch(0.74 0.09 255);
-  --e-1: 0 1px 2px oklch(0 0 0 / 0.4);
-  --e-2: 0 12px 32px -8px oklch(0 0 0 / 0.6), 0 2px 6px oklch(0 0 0 / 0.3);
+  --ring: oklch(0.78 0.15 68);
+  --brand-ink: oklch(0.85 0.12 75);
+  --brand-soft: oklch(0.28 0.05 65);
+  --yes: oklch(0.78 0.16 152);
+  --later: oklch(0.76 0.13 295);
+  --maybe: oklch(0.84 0.13 85);
+  --tint: 18%;
+  --e-1: 0 1px 1px 0 oklch(0 0 0 / 0.4), inset 0 1px 0 0 oklch(1 0 0 / 0.04);
+  --e-2: 0 0 0 1px oklch(1 0 0 / 0.06), 0 1px 12px 0 oklch(0 0 0 / 0.5), inset 0 1px 0 0 oklch(1 0 0 / 0.05);
+  --e-3: 0 0 0 1px oklch(1 0 0 / 0.08), 0 0 48px 0 oklch(0 0 0 / 0.6), 0 1px 12px 0 oklch(0 0 0 / 0.4), inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+  --highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.35);
   color-scheme: dark;
 }
 
@@ -136,14 +157,21 @@
   --color-no: var(--destructive);
   --color-yes: var(--yes);
   --color-later: var(--later);
-  --color-no-soft: color-mix(in oklab, var(--destructive) 9%, var(--card));
-  --color-yes-soft: color-mix(in oklab, var(--yes) 9%, var(--card));
+  --color-maybe: var(--maybe);
+  --color-no-soft: color-mix(in oklab, var(--destructive) var(--tint), var(--card));
+  --color-yes-soft: color-mix(in oklab, var(--yes) var(--tint), var(--card));
+  --color-later-soft: color-mix(in oklab, var(--later) var(--tint), var(--card));
+  --color-maybe-soft: color-mix(in oklab, var(--maybe) var(--tint), var(--card));
+  --color-yes-ink: color-mix(in oklab, var(--yes) 70%, var(--foreground));
+  --color-later-ink: color-mix(in oklab, var(--later) 70%, var(--foreground));
+  --color-no-ink: color-mix(in oklab, var(--destructive) 70%, var(--foreground));
 
   --font-*: initial;
-  --font-display: "Bricolage Grotesque Variable", "Segoe UI", system-ui, sans-serif;
-  --font-sans: "Figtree Variable", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-sans: "Schibsted Grotesk Variable", "Segoe UI", system-ui, sans-serif;
   --font-body: var(--font-sans);
-  --font-mono: "JetBrains Mono Variable", ui-monospace, Menlo, monospace;
+  /* ponytail: no monospace face; "font-mono" spots (slugs, dates, counters) read better in the sans with fixed-width digits. */
+  --font-mono: var(--font-sans);
 
   --text-*: initial;
   --text-xs: 0.75rem;
@@ -171,6 +199,7 @@
   --shadow-e-1: var(--e-1);
   --shadow-e-2: var(--e-2);
   --shadow-lg: var(--e-2);
+  --shadow-e-3: var(--e-3);
 
   --ease-*: initial;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -200,10 +229,13 @@
   h2,
   h3 {
     font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.12;
     text-wrap: balance;
+  }
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
   a {
     color: var(--brand-ink);
@@ -242,6 +274,39 @@
 @keyframes fade {
   from {
     opacity: 0;
+  }
+}
+
+/* BoardUI's gradient button: default gradient on the element, hover gradient on ::before fading in,
+   because background-image can't be transitioned. Highlight + 1px darker edge give the glassy press. */
+@utility bg-button-primary {
+  position: relative;
+  isolation: isolate;
+  background-image: linear-gradient(180deg, var(--primary-top), var(--primary-bottom));
+  box-shadow: var(--highlight), 0 0 0 1px var(--primary-edge), 0 1px 2px 0 oklch(0 0 0 / 0.12);
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image: linear-gradient(180deg, oklch(from var(--primary-top) l calc(c + 0.03) h), oklch(from var(--primary-bottom) l calc(c + 0.03) h));
+    opacity: 0;
+    transition: opacity var(--d-fast) ease;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+  &:active::before {
+    opacity: 0;
+  }
+  &:active {
+    background-image: linear-gradient(180deg, var(--primary-bottom), var(--primary-edge));
+  }
+  &:disabled,
+  &[aria-disabled="true"] {
+    box-shadow: none;
   }
 }
 
